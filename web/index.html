@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>商品中心</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+</head>
+<body>
+  <!-- 顶部导航 -->
+  <nav id="navbar">
+    <div class="nav-brand">商品中心</div>
+    <div class="nav-actions">
+      <div id="nav-auth" class="nav-auth hidden">
+        <span id="nav-username"></span>
+        <button id="btn-logout" class="btn-text">退出</button>
+      </div>
+      <div id="nav-login-link" class="hidden">
+        <button id="btn-show-login" class="btn-primary">登录</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 主内容区 -->
+  <main id="app">
+    <!-- 登录/注册模态框 -->
+    <div id="modal-auth" class="modal hidden">
+      <div class="modal-overlay" id="modal-overlay"></div>
+      <div class="modal-box">
+        <div class="modal-tabs">
+          <button class="tab-btn active" data-tab="login">登录</button>
+          <button class="tab-btn" data-tab="register">注册</button>
+        </div>
+        <div class="tab-panel" id="panel-login">
+          <input type="text" id="login-username" placeholder="用户名" class="input-field" />
+          <input type="password" id="login-password" placeholder="密码" class="input-field" />
+          <button id="btn-login" class="btn-primary btn-block">登录</button>
+          <div id="login-error" class="error-msg hidden"></div>
+        </div>
+        <div class="tab-panel hidden" id="panel-register">
+          <input type="text" id="reg-username" placeholder="用户名（最多64字符）" class="input-field" />
+          <input type="password" id="reg-password" placeholder="密码（至少6位）" class="input-field" />
+          <button id="btn-register" class="btn-primary btn-block">注册</button>
+          <div id="reg-error" class="error-msg hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 商品列表区（business=true 时显示） -->
+    <section id="section-products" class="business-only hidden">
+      <h2 class="section-title">选择套餐</h2>
+      <div id="products-grid" class="products-grid">
+        <!-- 商品卡片由 JS 动态渲染 -->
+      </div>
+      <div id="products-empty" class="empty-tip hidden">暂无商品</div>
+    </section>
+
+    <!-- 管理后台入口（business=true 时显示） -->
+    <section id="section-admin" class="business-only hidden">
+      <div class="admin-panel">
+        <h2 class="section-title">管理后台</h2>
+
+        <!-- 新增商品 -->
+        <div class="admin-block">
+          <h3>新增商品</h3>
+          <div class="form-grid">
+            <input type="text" id="admin-key" placeholder="商品 key（唯一标识）" class="input-field" />
+            <input type="text" id="admin-title" placeholder="商品名称" class="input-field" />
+            <input type="number" id="admin-price" placeholder="价格（元）" step="0.01" min="0.01" class="input-field" />
+            <input type="number" id="admin-expire" placeholder="有效时长（秒，留空=永久）" class="input-field" />
+            <label class="checkbox-label">
+              <input type="checkbox" id="admin-support-continue" />
+              支持续费
+            </label>
+          </div>
+          <div class="form-group">
+            <label>商品描述（支持富文本 HTML）</label>
+            <textarea id="admin-desc" class="textarea-field" rows="4" placeholder="<p>商品描述...</p>"></textarea>
+          </div>
+          <div class="form-group">
+            <label>商品封面图</label>
+            <div class="upload-area">
+              <input type="file" id="admin-icon-file" accept="image/*" class="hidden" />
+              <button id="btn-upload-icon" class="btn-secondary">选择图片并上传</button>
+              <span id="icon-upload-status"></span>
+              <input type="text" id="admin-icon-url" placeholder="或直接输入图片 URL" class="input-field" />
+            </div>
+          </div>
+          <button id="btn-add-product" class="btn-primary">新增商品</button>
+          <div id="add-product-msg" class="msg hidden"></div>
+        </div>
+
+        <!-- 购买记录 -->
+        <div class="admin-block">
+          <h3>购买记录</h3>
+          <div class="filter-bar">
+            <input type="number" id="filter-user-id" placeholder="用户 ID（留空=全部）" class="input-field input-sm" />
+            <select id="filter-status" class="select-field">
+              <option value="">全部状态</option>
+              <option value="pending">待支付</option>
+              <option value="paid">已支付</option>
+              <option value="failed">失败</option>
+              <option value="refunded">已退款</option>
+            </select>
+            <button id="btn-query-orders" class="btn-secondary">查询</button>
+          </div>
+          <div id="admin-token-input" class="form-group">
+            <input type="password" id="admin-token" placeholder="Admin Token" class="input-field input-sm" />
+          </div>
+          <div id="orders-table-wrap" class="table-wrap">
+            <table id="orders-table" class="data-table hidden">
+              <thead>
+                <tr>
+                  <th>订单号</th>
+                  <th>用户ID</th>
+                  <th>商品</th>
+                  <th>金额</th>
+                  <th>类型</th>
+                  <th>状态</th>
+                  <th>创建时间</th>
+                </tr>
+              </thead>
+              <tbody id="orders-tbody"></tbody>
+            </table>
+            <div id="orders-empty" class="empty-tip hidden">暂无记录</div>
+          </div>
+          <div id="orders-pagination" class="pagination hidden"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast 通知 -->
+  <div id="toast-container"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# 商品支付模板 - Web 前端配置文件
+
+[server]
+# 监听地址
+host = "0.0.0.0"
+# 前端服务端口
+port = 8081
+
+[apiserver]
+# 后端 API Server 主机地址
+host = "http://your-api-server.com"
+# 后端 API 路径前缀
+path_prefix = "/api"
+
+# 是否开启商业化功能（商品购买、续费等）
+# 设为 false 时，前端不展示任何商品相关页面和入口
+business = true

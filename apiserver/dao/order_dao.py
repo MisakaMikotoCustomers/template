@@ -12,7 +12,7 @@ from .models import Order
 
 
 def create_order(user_id: int, product_id: int, product_key: str,
-                 out_trade_no: str, amount: float, order_type: str,
+                 out_trade_no: str, amount: int, order_type: str,
                  expire_at: Optional[datetime]) -> Order:
     """创建订单"""
     session = get_session()
@@ -44,6 +44,16 @@ def mark_order_paid(out_trade_no: str, trade_no: str) -> bool:
             .filter(Order.out_trade_no == out_trade_no,
                     Order.status == Order.STATUS_PENDING)
             .update({'status': Order.STATUS_PAID, 'trade_no': trade_no}))
+    return rows > 0
+
+
+def mark_order_refunded(out_trade_no: str) -> bool:
+    """将订单标记为已退款（幂等：仅更新 paid 状态的订单）"""
+    session = get_session()
+    rows = (session.query(Order)
+            .filter(Order.out_trade_no == out_trade_no,
+                    Order.status == Order.STATUS_PAID)
+            .update({'status': Order.STATUS_REFUNDED}))
     return rows > 0
 
 

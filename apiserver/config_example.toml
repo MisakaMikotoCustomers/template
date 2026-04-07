@@ -32,6 +32,10 @@ app_id = "your-alipay-app-id"
 app_private_key = "your-app-private-key"
 # 支付宝公钥（不含头尾，无换行）
 alipay_public_key = "your-alipay-public-key"
+# 接口内容 AES 加密密钥（Base64 格式，在支付宝开放平台"开发设置-接口加签方式"中获取）
+# 选填。配置后，接口请求/响应的 biz_content 将使用 AES-128-CBC 加密，提升传输安全性。
+# 使用"获取会员手机号"等敏感能力时必填。
+app_encrypt_key = ""
 # 支付宝异步通知回调 URL（必须公网可访问）
 notify_url = "https://your-domain.com/api/commercial/alipay/notify"
 # 支付完成后同步跳转 URL

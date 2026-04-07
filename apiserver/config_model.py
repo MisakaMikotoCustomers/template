@@ -44,6 +44,7 @@ class AlipayConfig:
     return_url: str = ""           # 同步返回 URL（支付完成后跳转）
     gateway: str = "https://openapi.alipay.com/gateway.do"
     sandbox: bool = False          # 沙箱模式
+    app_encrypt_key: str = ""      # AES 内容加密密钥（Base64，使用获取会员手机号等能力时必填）
 
 
 @dataclass

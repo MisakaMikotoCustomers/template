@@ -14,18 +14,6 @@ from dao.models import Order, Product
 
 logger = logging.getLogger(__name__)
 
-_CENTS_PER_YUAN = 100
-
-
-def yuan_to_cents(amount_yuan: float) -> int:
-    """金额（元）转整数分，规避浮点误差"""
-    return int(round(float(amount_yuan) * _CENTS_PER_YUAN))
-
-
-def cents_to_yuan_str(amount_cents: int) -> str:
-    """整数分转两位小数字符串（元）"""
-    return f'{(int(amount_cents) / _CENTS_PER_YUAN):.2f}'
-
 
 def _generate_out_trade_no() -> str:
     """生成唯一商户订单号：时间戳 + UUID"""
@@ -51,7 +39,7 @@ def create_order(user_id: int, product: Product, order_type: str) -> Order:
         product_id=product.id,
         product_key=product.key,
         out_trade_no=out_trade_no,
-        amount=yuan_to_cents(float(product.price)),
+        amount=float(product.price),
         order_type=order_type,
         expire_at=expire_at,
     )

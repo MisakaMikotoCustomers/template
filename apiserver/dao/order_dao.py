@@ -12,7 +12,7 @@ from .models import Order
 
 
 def create_order(user_id: int, product_id: int, product_key: str,
-                 out_trade_no: str, amount: int, order_type: str,
+                 out_trade_no: str, amount: float, order_type: str,
                  expire_at: Optional[datetime]) -> Order:
     """创建订单"""
     session = get_session()

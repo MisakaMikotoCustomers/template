@@ -115,7 +115,7 @@ class Order(Base):
     out_trade_no = Column(String(64), nullable=False, comment='商户订单号（唯一）')
     trade_no = Column(String(64), nullable=True, comment='第三方平台交易号')
     status = Column(String(20), nullable=False, default='pending', comment='订单状态')
-    amount = Column(Integer, nullable=False, comment='实付金额（分）')
+    amount = Column(Numeric(10, 2), nullable=False, comment='实付金额（元）')
     order_type = Column(String(16), nullable=False, default='purchase', comment='purchase/renew')
     expire_at = Column(DateTime, nullable=True, comment='权益到期时间')
     created_at = Column(DateTime, server_default=func.utc_timestamp(), comment='创建时间')
@@ -142,7 +142,7 @@ class Order(Base):
             'out_trade_no': self.out_trade_no,
             'trade_no': self.trade_no or '',
             'status': self.status,
-            'amount': int(self.amount) if self.amount is not None else 0,
+            'amount': float(self.amount) if self.amount is not None else 0.0,
             'order_type': self.order_type,
             'expire_at': to_iso_utc(self.expire_at),
             'created_at': to_iso_utc(self.created_at),

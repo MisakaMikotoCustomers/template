@@ -28,7 +28,6 @@ class ApiServerConfig:
 class WebConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     apiserver: ApiServerConfig = field(default_factory=ApiServerConfig)
-    business: bool = True   # 是否开启商业化功能（商品购买等）
 
     @classmethod
     def from_toml(cls, path: str) -> "WebConfig":
@@ -37,5 +36,4 @@ class WebConfig:
         return cls(
             server=ServerConfig(**data.get("server", {})),
             apiserver=ApiServerConfig(**data.get("apiserver", {})),
-            business=data.get("business", True),
         )

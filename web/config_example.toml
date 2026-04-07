@@ -12,6 +12,3 @@ host = "http://your-api-server.com"
 # 后端 API 路径前缀
 path_prefix = "/api"
 
-# 是否开启商业化功能（商品购买、续费等）
-# 设为 false 时，前端不展示任何商品相关页面和入口
-business = true

@@ -30,16 +30,19 @@ _SANDBOX_GATEWAY = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do'
 
 
 def _load_private_key(pem_content: str) -> RSAPrivateKey:
-    """加载 RSA 私钥（支持带/不带 PEM 头尾）"""
+    """加载 RSA 私钥（自动兼容 PKCS8 / PKCS1，支持 PEM 或纯 Base64）"""
     pem_content = pem_content.strip()
-    if not pem_content.startswith('-----'):
-        pem_content = (
-            '-----BEGIN PRIVATE KEY-----\n'
-            + '\n'.join(pem_content[i:i+64] for i in range(0, len(pem_content), 64))
-            + '\n-----END PRIVATE KEY-----'
+
+    # 已带 PEM 头尾，直接加载（可兼容 BEGIN PRIVATE KEY / BEGIN RSA PRIVATE KEY）
+    if pem_content.startswith('-----'):
+        return serialization.load_pem_private_key(
+            pem_content.encode('utf-8'), password=None, backend=default_backend()
         )
-    return serialization.load_pem_private_key(
-        pem_content.encode('utf-8'), password=None, backend=default_backend()
+
+    # 无 PEM 头尾时，先按 DER 解码后自动识别（PKCS8 / PKCS1）
+    der_bytes = base64.b64decode(pem_content)
+    return serialization.load_der_private_key(
+        der_bytes, password=None, backend=default_backend()
     )
 
 
@@ -81,10 +84,14 @@ def _aes_decrypt(ciphertext_b64: str, key_b64: str) -> str:
     return plaintext.decode('utf-8')
 
 
-def _build_sign_string(params: Dict) -> str:
-    """构建签名原串：按 key 字母排序，过滤 sign/sign_type/空值，拼接 k=v&k=v"""
+def _build_sign_string(params: Dict, *, exclude_sign_type: bool = False) -> str:
+    """构建签名原串：按 key 字母排序，过滤 sign/空值，按需过滤 sign_type。"""
+    excluded_keys = {'sign'}
+    if exclude_sign_type:
+        excluded_keys.add('sign_type')
+
     items = sorted(
-        ((k, v) for k, v in params.items() if k not in ('sign', 'sign_type') and v is not None and v != ''),
+        ((k, v) for k, v in params.items() if k not in excluded_keys and v is not None and v != ''),
         key=lambda x: x[0]
     )
     return '&'.join(f'{k}={v}' for k, v in items)
@@ -182,7 +189,7 @@ def verify_notify(config: AlipayConfig, post_data: Dict) -> bool:
         return False
 
     # 构建待验证字符串（排除 sign 和 sign_type）
-    sign_string = _build_sign_string(post_data)
+    sign_string = _build_sign_string(post_data, exclude_sign_type=True)
 
     try:
         public_key = _load_public_key(config.alipay_public_key)

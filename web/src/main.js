@@ -205,12 +205,10 @@ async function init() {
   updateAuthUI()
   initAuthModal()
 
-  if (config.business) {
-    // 显示商业化相关区块
-    document.querySelectorAll('.business-only').forEach(el => show(el))
-    await loadProducts()
-    initAdmin()
-  }
+  // 显示商业化相关区块（始终开启）
+  document.querySelectorAll('.business-only').forEach(el => show(el))
+  await loadProducts()
+  initAdmin()
 }
 
 init().catch(console.error)

@@ -32,13 +32,12 @@ def create_app(config: WebConfig) -> Flask:
 
     @app.route(f'{url_prefix}/config.json')
     def get_config():
-        """前端通过此接口获取后端地址和功能开关"""
+        """前端通过此接口获取后端地址"""
         return jsonify({
             'apiserver': {
                 'host': config.apiserver.host,
                 'path_prefix': config.apiserver.path_prefix,
             },
-            'business': config.business,
         })
 
     @app.route(f'{url_prefix}/', defaults={'path': ''})

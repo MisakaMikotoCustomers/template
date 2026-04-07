@@ -61,19 +61,35 @@ async function adminRequest(path, options = {}, adminToken) {
   return res.json()
 }
 
+// ── 密码哈希 ──────────────────────────────────────────────────────
+
+/**
+ * 在发送前对明文密码做 SHA256，返回 64 位十六进制字符串。
+ * 使用 Web Crypto API，无需第三方库。
+ */
+async function hashPassword(plaintext) {
+  const encoded = new TextEncoder().encode(plaintext)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 // ── 用户接口 ──────────────────────────────────────────────────────
 
 export async function register(username, password) {
+  const hashedPassword = await hashPassword(password)
   return request('/user/register', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password: hashedPassword }),
   })
 }
 
 export async function login(username, password) {
+  const hashedPassword = await hashPassword(password)
   const data = await request('/user/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password: hashedPassword }),
   })
   if (data?.code === 200) {
     setToken(data.data.token)

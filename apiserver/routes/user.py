@@ -17,9 +17,17 @@ logger = logging.getLogger(__name__)
 user_bp = Blueprint('user', __name__)
 
 
-def _hash_password(password: str) -> str:
-    """简单 SHA256 哈希（生产中建议使用 bcrypt）"""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+_HEX_CHARS = frozenset('0123456789abcdef')
+
+
+def _is_client_hash(value: str) -> bool:
+    """校验是否为合法的 SHA256 十六进制字符串（64 位）"""
+    return len(value) == 64 and all(c in _HEX_CHARS for c in value.lower())
+
+
+def _hash_password(client_hash: str) -> str:
+    """对前端已哈希的密码再做一次 SHA256，存入 DB（双重哈希）"""
+    return hashlib.sha256(client_hash.encode('utf-8')).hexdigest()
 
 
 @user_bp.route('/register', methods=['POST'])
@@ -32,8 +40,12 @@ def register():
     if not username or not password:
         return jsonify({'code': 400, 'message': '用户名和密码不能为空', 'data': None}), 400
 
-    if len(username) > 64 or len(password) < 6:
-        return jsonify({'code': 400, 'message': '用户名最长64字符，密码最少6字符', 'data': None}), 400
+    if len(username) > 64:
+        return jsonify({'code': 400, 'message': '用户名最长64字符', 'data': None}), 400
+
+    # 前端负责在 hash 前做最小长度校验，后端只验证格式
+    if not _is_client_hash(password):
+        return jsonify({'code': 400, 'message': 'password 格式错误（需为前端 SHA256 哈希值）', 'data': None}), 400
 
     with get_db_session():
         existing = user_dao.get_user_by_username(username)
@@ -59,6 +71,9 @@ def login():
 
     if not username or not password:
         return jsonify({'code': 400, 'message': '用户名和密码不能为空', 'data': None}), 400
+
+    if not _is_client_hash(password):
+        return jsonify({'code': 400, 'message': 'password 格式错误（需为前端 SHA256 哈希值）', 'data': None}), 400
 
     user = user_dao.get_user_by_username(username)
     if not user or user.password_hash != _hash_password(password):

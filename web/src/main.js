@@ -90,6 +90,11 @@ function initAuthModal() {
     const password = $('reg-password').value
     hide($('reg-error'))
     if (!username || !password) return
+    if (password.length < 6) {
+      $('reg-error').textContent = '密码至少6位'
+      show($('reg-error'))
+      return
+    }
 
     const res = await register(username, password)
     if (res?.code === 200) {

@@ -64,15 +64,17 @@ def _do_auth_check():
     return None
 
 
-def register_global_auth(app, api_prefix: str = '/api'):
-    """注册全局鉴权 before_request"""
+def register_global_auth(app):
+    """注册全局鉴权 before_request
+    所有接口默认需要鉴权，仅 @skip_auth 标记的接口可跳过。
+    """
 
     @app.before_request
     def _global_auth_guard():
+        # CORS 预检请求放行
         if request.method == 'OPTIONS':
             return None
-        if not request.path.startswith(api_prefix):
-            return None
+        # 标记了 @skip_auth 的接口放行
         if _is_skip_auth_endpoint():
             return None
         return _do_auth_check()

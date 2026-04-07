@@ -51,7 +51,7 @@ def create_app(config: AppConfig) -> Flask:
     app.register_blueprint(user_bp,       url_prefix=f'{prefix}/api/user')
     app.register_blueprint(commercial_bp, url_prefix=f'{prefix}/api/commercial')
     app.register_blueprint(admin_bp,      url_prefix=f'{prefix}/api/admin')
-    register_global_auth(app, api_prefix=f'{prefix}/api')
+    register_global_auth(app)
 
     api_prefix = f'{prefix}/api'
 

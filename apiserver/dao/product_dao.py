@@ -4,6 +4,7 @@
 商品 DAO - 纯数据库操作
 """
 
+from datetime import datetime, timezone
 from typing import Optional, List
 
 from .connection import get_session
@@ -14,6 +15,12 @@ def get_all_products() -> List[Product]:
     """查询所有未删除商品"""
     session = get_session()
     return session.query(Product).filter(Product.deleted_at.is_(None)).all()
+
+
+def list_all_products_admin() -> List[Product]:
+    """管理端：含已下架（软删除）商品，按 id 倒序"""
+    session = get_session()
+    return session.query(Product).order_by(Product.id.desc()).all()
 
 
 def get_product_by_id(product_id: int) -> Optional[Product]:
@@ -57,4 +64,14 @@ def update_product_icon(product_id: int, icon_url: str) -> bool:
     rows = (session.query(Product)
             .filter(Product.id == product_id, Product.deleted_at.is_(None))
             .update({'icon': icon_url}))
+    return rows > 0
+
+
+def soft_delete_product(product_id: int) -> bool:
+    """软删除（下架）：仅处理当前上架中的商品"""
+    session = get_session()
+    now = datetime.now(timezone.utc)
+    rows = (session.query(Product)
+            .filter(Product.id == product_id, Product.deleted_at.is_(None))
+            .update({'deleted_at': now}))
     return rows > 0

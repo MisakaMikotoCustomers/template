@@ -90,6 +90,32 @@
           <div id="add-product-msg" class="msg hidden"></div>
         </div>
 
+        <!-- 商品列表（下架） -->
+        <div class="admin-block">
+          <h3>商品列表</h3>
+          <p class="admin-hint">请先在下方「购买记录」中填写 Admin Token，再刷新列表。</p>
+          <div class="filter-bar">
+            <button id="btn-refresh-admin-products" type="button" class="btn-secondary">刷新列表</button>
+          </div>
+          <div class="table-wrap">
+            <table id="admin-products-table" class="data-table hidden">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Key</th>
+                  <th>名称</th>
+                  <th>价格</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="admin-products-tbody"></tbody>
+            </table>
+            <div id="admin-products-empty" class="empty-tip hidden">暂无商品</div>
+          </div>
+          <div id="admin-products-msg" class="msg hidden"></div>
+        </div>
+
         <!-- 购买记录 -->
         <div class="admin-block">
           <h3>购买记录</h3>

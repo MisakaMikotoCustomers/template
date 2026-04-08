@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 管理后台路由（所有路由需要 X-Admin-Token 认证）
-- POST /api/admin/product         - 新增商品
-- GET  /api/admin/orders          - 查询购买记录
-- POST /api/admin/upload/icon     - 上传商品封面图到 OSS
+- POST /api/admin/product              - 新增商品
+- GET  /api/admin/products             - 商品列表（含已下架）
+- POST /api/admin/product/<id>/offline - 商品下架（软删除）
+- GET  /api/admin/orders               - 查询购买记录
+- POST /api/admin/upload/icon          - 上传商品封面图到 OSS
 """
 
 import logging
@@ -67,6 +69,28 @@ def create_product():
         )
 
     return jsonify({'code': 200, 'message': 'ok', 'data': product.to_dict()})
+
+
+@admin_bp.route('/products', methods=['GET'])
+def list_products_admin():
+    """管理端商品列表（含已下架）"""
+    products = product_dao.list_all_products_admin()
+    data = []
+    for p in products:
+        d = p.to_dict()
+        d['offline'] = p.deleted_at is not None
+        data.append(d)
+    return jsonify({'code': 200, 'message': 'ok', 'data': data})
+
+
+@admin_bp.route('/product/<int:product_id>/offline', methods=['POST'])
+def offline_product(product_id: int):
+    """下架商品（软删除，前台不再展示）"""
+    with get_db_session():
+        ok = product_dao.soft_delete_product(product_id)
+    if not ok:
+        return jsonify({'code': 404, 'message': '商品不存在或已下架', 'data': None}), 404
+    return jsonify({'code': 200, 'message': 'ok', 'data': None})
 
 
 @admin_bp.route('/orders', methods=['GET'])

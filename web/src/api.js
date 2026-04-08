@@ -129,6 +129,14 @@ export async function createProduct(adminToken, payload) {
   }, adminToken)
 }
 
+export async function getAdminProducts(adminToken) {
+  return adminRequest('/admin/products', { method: 'GET' }, adminToken)
+}
+
+export async function offlineProduct(adminToken, productId) {
+  return adminRequest(`/admin/product/${productId}/offline`, { method: 'POST' }, adminToken)
+}
+
 export async function getOrders(adminToken, { page = 1, pageSize = 20, userId, status } = {}) {
   const params = new URLSearchParams({ page, page_size: pageSize })
   if (userId) params.set('user_id', userId)

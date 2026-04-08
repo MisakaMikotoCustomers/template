@@ -209,6 +209,10 @@ async function init() {
   document.querySelectorAll('.business-only').forEach(el => show(el))
   await loadProducts()
   initAdmin()
+
+  window.addEventListener('shop-products-updated', () => {
+    loadProducts().catch(console.error)
+  })
 }
 
 init().catch(console.error)

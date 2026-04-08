@@ -2,7 +2,7 @@
  * 管理后台逻辑
  */
 
-import { createProduct, getOrders, uploadIcon } from './api.js'
+import { createProduct, getAdminProducts, offlineProduct, getOrders, uploadIcon } from './api.js'
 
 function $(id) { return document.getElementById(id) }
 function hide(el) { el && el.classList.add('hidden') }
@@ -17,7 +17,86 @@ function showMsg(el, msg, isError = false) {
 
 export function initAdmin() {
   initAddProduct()
+  initAdminProductList()
   initOrdersQuery()
+}
+
+// ── 商品列表（下架）───────────────────────────────────────────────
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
+async function fetchAdminProducts() {
+  const adminToken = $('admin-token')?.value?.trim() || ''
+  const msgEl = $('admin-products-msg')
+  const tbody = $('admin-products-tbody')
+  const table = $('admin-products-table')
+  const empty = $('admin-products-empty')
+
+  if (!adminToken) {
+    showMsg(msgEl, '请先填写下方「购买记录」中的 Admin Token', true)
+    return
+  }
+  hide(msgEl)
+
+  try {
+    const res = await getAdminProducts(adminToken)
+    if (res?.code !== 200) {
+      showMsg(msgEl, res?.message || '加载失败', true)
+      return
+    }
+    const items = res.data || []
+    tbody.innerHTML = ''
+    if (!items.length) {
+      hide(table)
+      show(empty)
+      return
+    }
+    show(table)
+    hide(empty)
+
+    items.forEach((p) => {
+      const tr = document.createElement('tr')
+      const offline = p.offline
+      tr.innerHTML = `
+        <td>${p.id}</td>
+        <td>${escapeHtml(p.key)}</td>
+        <td>${escapeHtml(p.title)}</td>
+        <td>¥${Number(p.price).toFixed(2)}</td>
+        <td>${offline ? '<span class="status-badge status-failed">已下架</span>' : '<span class="status-badge status-paid">上架中</span>'}</td>
+        <td>${offline ? '—' : `<button type="button" class="btn-danger btn-offline-product" data-id="${p.id}">下架</button>`}</td>
+      `
+      tbody.appendChild(tr)
+    })
+
+    tbody.querySelectorAll('.btn-offline-product').forEach((btn) => {
+      btn.addEventListener('click', () => doOfflineProduct(btn.dataset.id, adminToken))
+    })
+  } catch (e) {
+    showMsg(msgEl, '网络错误', true)
+  }
+}
+
+async function doOfflineProduct(productId, adminToken) {
+  const msgEl = $('admin-products-msg')
+  if (!confirm('确认下架该商品？前台将不再展示。')) return
+  try {
+    const res = await offlineProduct(adminToken, productId)
+    if (res?.code === 200) {
+      window.dispatchEvent(new CustomEvent('shop-products-updated'))
+      await fetchAdminProducts()
+      showMsg(msgEl, '已下架', false)
+    } else {
+      showMsg(msgEl, res?.message || '下架失败', true)
+    }
+  } catch (e) {
+    showMsg(msgEl, '网络错误', true)
+  }
+}
+
+function initAdminProductList() {
+  $('btn-refresh-admin-products')?.addEventListener('click', () => fetchAdminProducts())
 }
 
 // ── 新增商品 ──────────────────────────────────────────────────────
@@ -70,6 +149,8 @@ function initAddProduct() {
       const res = await createProduct(adminToken, payload)
       if (res?.code === 200) {
         showMsg(msgEl, `商品 "${payload.title}" 创建成功`)
+        window.dispatchEvent(new CustomEvent('shop-products-updated'))
+        if (adminToken) fetchAdminProducts()
         // 清空表单
         ;['admin-key', 'admin-title', 'admin-price', 'admin-expire', 'admin-icon-url'].forEach(
           id => { const el = $(id); if (el) el.value = '' }

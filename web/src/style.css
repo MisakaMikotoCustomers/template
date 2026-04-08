@@ -36,6 +36,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .btn-primary:hover { background: var(--primary-hover); }
 .btn-secondary { background: #f3f4f6; color: var(--text); padding: 8px 16px; border: 1px solid var(--border); }
 .btn-secondary:hover { background: #e5e7eb; }
+.btn-danger { cursor: pointer; border: none; border-radius: var(--radius); font-size: .8rem; font-weight: 500; padding: 6px 12px; background: var(--error); color: #fff; transition: filter .15s; }
+.btn-danger:hover { filter: brightness(0.95); }
 .btn-text { background: none; color: var(--text-muted); padding: 4px 8px; }
 .btn-text:hover { color: var(--error); }
 .btn-block { width: 100%; padding: 10px; }
@@ -85,6 +87,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .admin-panel { display: flex; flex-direction: column; gap: 32px; }
 .admin-block { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); }
 .admin-block h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; }
+.admin-hint { font-size: .8rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4; }
 .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 
 /* ── Table ───────────────────────────────────────────────────── */

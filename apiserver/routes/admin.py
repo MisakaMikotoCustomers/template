@@ -118,9 +118,6 @@ def upload_icon():
     """上传商品封面图到 OSS，返回公开访问链接"""
     config = current_app.config['APP_CONFIG']
 
-    if not config.oss.enabled:
-        return jsonify({'code': 400, 'message': 'OSS 未启用，请先在配置中开启', 'data': None}), 400
-
     file = request.files.get('file')
     if not file:
         return jsonify({'code': 400, 'message': '缺少 file 字段', 'data': None}), 400

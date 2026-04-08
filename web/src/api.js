@@ -1,6 +1,6 @@
 /**
  * API 客户端
- * 自动从 /config.json 加载后端地址，注入 Authorization Token
+ * 自动从 /config.json 加载后端地址，统一注入 Authorization Token
  */
 
 let _config = null
@@ -44,21 +44,6 @@ async function request(path, options = {}) {
 
   const data = await res.json()
   return data
-}
-
-async function adminRequest(path, options = {}, adminToken) {
-  const config = await loadConfig()
-  const base = `${config.apiserver.host}${config.apiserver.path_prefix}`
-  const url = `${base}${path}`
-
-  const headers = {
-    'Content-Type': 'application/json',
-    'X-Admin-Token': adminToken || '',
-    ...(options.headers || {}),
-  }
-
-  const res = await fetch(url, { ...options, headers })
-  return res.json()
 }
 
 // ── 密码哈希 ──────────────────────────────────────────────────────
@@ -122,36 +107,37 @@ export async function buyProduct(productId, orderType = 'purchase', device = nul
 
 // ── 管理接口 ──────────────────────────────────────────────────────
 
-export async function createProduct(adminToken, payload) {
-  return adminRequest('/admin/product', {
+export async function createProduct(payload) {
+  return request('/admin/product', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }, adminToken)
+  })
 }
 
-export async function getAdminProducts(adminToken) {
-  return adminRequest('/admin/products', { method: 'GET' }, adminToken)
+export async function getAdminProducts() {
+  return request('/admin/products', { method: 'GET' })
 }
 
-export async function offlineProduct(adminToken, productId) {
-  return adminRequest(`/admin/product/${productId}/offline`, { method: 'POST' }, adminToken)
+export async function offlineProduct(productId) {
+  return request(`/admin/product/${productId}/offline`, { method: 'POST' })
 }
 
-export async function getOrders(adminToken, { page = 1, pageSize = 20, userId, status } = {}) {
+export async function getOrders({ page = 1, pageSize = 20, userId, status } = {}) {
   const params = new URLSearchParams({ page, page_size: pageSize })
   if (userId) params.set('user_id', userId)
   if (status) params.set('status', status)
-  return adminRequest(`/admin/orders?${params}`, { method: 'GET' }, adminToken)
+  return request(`/admin/orders?${params}`, { method: 'GET' })
 }
 
-export async function uploadIcon(adminToken, file) {
+export async function uploadIcon(file) {
   const config = await loadConfig()
   const base = `${config.apiserver.host}${config.apiserver.path_prefix}`
+  const token = getToken()
   const formData = new FormData()
   formData.append('file', file)
   const res = await fetch(`${base}/admin/upload/icon`, {
     method: 'POST',
-    headers: { 'X-Admin-Token': adminToken || '' },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
   })
   return res.json()

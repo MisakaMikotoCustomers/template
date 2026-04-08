@@ -132,9 +132,9 @@ docker run -d \
 
 | 方法 | 路径 | 描述 | 认证 |
 |------|------|------|------|
-| POST | `/api/admin/product` | 新增商品 | X-Admin-Token |
-| GET  | `/api/admin/orders` | 查询购买记录 | X-Admin-Token |
-| POST | `/api/admin/upload/icon` | 上传商品封面图 | X-Admin-Token |
+| POST | `/api/admin/product` | 新增商品 | Bearer Token（admin） |
+| GET  | `/api/admin/orders` | 查询购买记录 | Bearer Token（admin） |
+| POST | `/api/admin/upload/icon` | 上传商品封面图 | Bearer Token（admin） |
 
 ### 用户接口
 

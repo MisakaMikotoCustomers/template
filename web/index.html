@@ -93,7 +93,6 @@
         <!-- 商品列表（下架） -->
         <div class="admin-block">
           <h3>商品列表</h3>
-          <p class="admin-hint">请先在下方「购买记录」中填写 Admin Token，再刷新列表。</p>
           <div class="filter-bar">
             <button id="btn-refresh-admin-products" type="button" class="btn-secondary">刷新列表</button>
           </div>
@@ -129,9 +128,6 @@
               <option value="refunded">已退款</option>
             </select>
             <button id="btn-query-orders" class="btn-secondary">查询</button>
-          </div>
-          <div id="admin-token-input" class="form-group">
-            <input type="password" id="admin-token" placeholder="Admin Token" class="input-field input-sm" />
           </div>
           <div id="orders-table-wrap" class="table-wrap">
             <table id="orders-table" class="data-table hidden">

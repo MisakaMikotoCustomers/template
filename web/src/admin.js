@@ -28,20 +28,14 @@ function escapeHtml(str) {
 }
 
 async function fetchAdminProducts() {
-  const adminToken = $('admin-token')?.value?.trim() || ''
   const msgEl = $('admin-products-msg')
   const tbody = $('admin-products-tbody')
   const table = $('admin-products-table')
   const empty = $('admin-products-empty')
-
-  if (!adminToken) {
-    showMsg(msgEl, '请先填写下方「购买记录」中的 Admin Token', true)
-    return
-  }
   hide(msgEl)
 
   try {
-    const res = await getAdminProducts(adminToken)
+    const res = await getAdminProducts()
     if (res?.code !== 200) {
       showMsg(msgEl, res?.message || '加载失败', true)
       return
@@ -71,18 +65,18 @@ async function fetchAdminProducts() {
     })
 
     tbody.querySelectorAll('.btn-offline-product').forEach((btn) => {
-      btn.addEventListener('click', () => doOfflineProduct(btn.dataset.id, adminToken))
+      btn.addEventListener('click', () => doOfflineProduct(btn.dataset.id))
     })
   } catch (e) {
     showMsg(msgEl, '网络错误', true)
   }
 }
 
-async function doOfflineProduct(productId, adminToken) {
+async function doOfflineProduct(productId) {
   const msgEl = $('admin-products-msg')
   if (!confirm('确认下架该商品？前台将不再展示。')) return
   try {
-    const res = await offlineProduct(adminToken, productId)
+    const res = await offlineProduct(productId)
     if (res?.code === 200) {
       window.dispatchEvent(new CustomEvent('shop-products-updated'))
       await fetchAdminProducts()
@@ -111,10 +105,9 @@ function initAddProduct() {
   fileInput?.addEventListener('change', async () => {
     const file = fileInput.files[0]
     if (!file) return
-    const adminToken = $('admin-token')?.value?.trim() || ''
     statusSpan.textContent = '上传中...'
     try {
-      const res = await uploadIcon(adminToken, file)
+      const res = await uploadIcon(file)
       if (res?.code === 200) {
         $('admin-icon-url').value = res.data.url
         statusSpan.textContent = '上传成功 ✓'
@@ -127,7 +120,6 @@ function initAddProduct() {
   })
 
   $('btn-add-product')?.addEventListener('click', async () => {
-    const adminToken = $('admin-token')?.value?.trim() || ''
     const msgEl = $('add-product-msg')
 
     const payload = {
@@ -146,11 +138,11 @@ function initAddProduct() {
     }
 
     try {
-      const res = await createProduct(adminToken, payload)
+      const res = await createProduct(payload)
       if (res?.code === 200) {
         showMsg(msgEl, `商品 "${payload.title}" 创建成功`)
         window.dispatchEvent(new CustomEvent('shop-products-updated'))
-        if (adminToken) fetchAdminProducts()
+        fetchAdminProducts()
         // 清空表单
         ;['admin-key', 'admin-title', 'admin-price', 'admin-expire', 'admin-icon-url'].forEach(
           id => { const el = $(id); if (el) el.value = '' }
@@ -178,12 +170,11 @@ function initOrdersQuery() {
 }
 
 async function fetchOrders() {
-  const adminToken = $('admin-token')?.value?.trim() || ''
   const userId = $('filter-user-id')?.value?.trim()
   const status = $('filter-status')?.value || ''
 
   try {
-    const res = await getOrders(adminToken, {
+    const res = await getOrders({
       page: _currentPage,
       pageSize: 20,
       userId: userId ? parseInt(userId) : undefined,

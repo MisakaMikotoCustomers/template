@@ -31,6 +31,7 @@ function showToast(msg, type = 'info') {
 function $(id) { return document.getElementById(id) }
 function hide(el) { el && el.classList.add('hidden') }
 function show(el) { el && el.classList.remove('hidden') }
+function isAdminUser(user) { return (user?.username || '').toLowerCase() === 'admin' }
 
 // ── 鉴权状态更新 ─────────────────────────────────────────────────
 
@@ -43,6 +44,18 @@ function updateAuthUI() {
   } else {
     hide($('nav-auth'))
     show($('nav-login-link'))
+  }
+
+  const isAdmin = isAdminUser(user)
+  const adminSection = $('section-admin')
+  const productsSection = $('section-products')
+
+  if (isAdmin) {
+    show(adminSection)
+    hide(productsSection)
+  } else {
+    hide(adminSection)
+    show(productsSection)
   }
 }
 
@@ -76,7 +89,9 @@ function initAuthModal() {
     if (res?.code === 200) {
       closeAuthModal()
       updateAuthUI()
-      await loadProducts()
+      if (!isAdminUser(getCurrentUser())) {
+        await loadProducts()
+      }
       showToast('登录成功', 'success')
     } else {
       $('login-error').textContent = res?.message || '登录失败'
@@ -100,7 +115,9 @@ function initAuthModal() {
     if (res?.code === 200) {
       closeAuthModal()
       updateAuthUI()
-      await loadProducts()
+      if (!isAdminUser(getCurrentUser())) {
+        await loadProducts()
+      }
       showToast('注册成功', 'success')
     } else {
       $('reg-error').textContent = res?.message || '注册失败'
@@ -113,7 +130,7 @@ function initAuthModal() {
     logout()
     updateAuthUI()
     showToast('已退出登录')
-    renderProducts([])
+    loadProducts().catch(console.error)
   })
 }
 
@@ -200,18 +217,22 @@ function formatDuration(seconds) {
 // ── 初始化 ────────────────────────────────────────────────────────
 
 async function init() {
-  const config = await loadConfig()
+  await loadConfig()
 
   updateAuthUI()
   initAuthModal()
 
-  // 显示商业化相关区块（始终开启）
+  // 初始显示路由容器，具体展示由 updateAuthUI 控制
   document.querySelectorAll('.business-only').forEach(el => show(el))
-  await loadProducts()
+  if (!isAdminUser(getCurrentUser())) {
+    await loadProducts()
+  }
   initAdmin()
 
   window.addEventListener('shop-products-updated', () => {
-    loadProducts().catch(console.error)
+    if (!isAdminUser(getCurrentUser())) {
+      loadProducts().catch(console.error)
+    }
   })
 }
 

@@ -65,7 +65,6 @@ class AppConfig:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     alipay: AlipayConfig = field(default_factory=AlipayConfig)
     oss: OssConfig = field(default_factory=OssConfig)
-    admin_token: str = ""  # 管理员静态 Token
 
     @classmethod
     def from_toml(cls, path: str) -> "AppConfig":
@@ -78,5 +77,4 @@ class AppConfig:
             database=DatabaseConfig(**data.get("database", {})),
             alipay=AlipayConfig(**data.get("alipay", {})),
             oss=OssConfig(**data.get("oss", {})),
-            admin_token=data.get("admin_token", ""),
         )

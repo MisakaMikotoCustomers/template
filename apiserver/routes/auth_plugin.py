@@ -3,7 +3,7 @@
 """
 统一鉴权模块
 - 普通用户路由：Bearer Token（存储于 DB）
-- Admin 路由：静态 X-Admin-Token（来自配置文件）
+- Admin 路由：Bearer Token + 用户 admin 身份校验
 - 支持 @skip_auth 跳过鉴权
 """
 
@@ -14,6 +14,7 @@ from flask import request, jsonify, current_app
 from dao import user_dao
 
 logger = logging.getLogger(__name__)
+ADMIN_USERNAME = 'admin'
 
 
 def skip_auth(f):
@@ -32,18 +33,9 @@ def _is_skip_auth_endpoint() -> bool:
 
 def _do_auth_check():
     """执行鉴权逻辑"""
-    config = current_app.config.get('APP_CONFIG')
     path = request.path
 
-    # Admin 路由使用静态 Admin Token 鉴权
-    if '/api/admin' in path:
-        admin_token = request.headers.get('X-Admin-Token', '')
-        if not admin_token or admin_token != (config.admin_token if config else ''):
-            logger.warning("Admin auth failed: path=%s", path)
-            return jsonify({'code': 401, 'message': '管理员认证失败'}), 401
-        return None
-
-    # 普通路由使用 Bearer Token 鉴权
+    # 所有业务路由都使用 Bearer Token 鉴权
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return jsonify({'code': 401, 'message': '缺少认证 Token'}), 401
@@ -61,6 +53,12 @@ def _do_auth_check():
         return jsonify({'code': 401, 'message': '用户不存在'}), 401
 
     request.current_user = user
+
+    # Admin 路由额外要求管理员身份（通过用户名判定）
+    if '/api/admin' in path and (getattr(user, 'username', '') or '').lower() != ADMIN_USERNAME:
+        logger.warning("Admin permission denied: path=%s user_id=%s", path, getattr(user, 'id', None))
+        return jsonify({'code': 403, 'message': '无管理员权限'}), 403
+
     return None
 
 

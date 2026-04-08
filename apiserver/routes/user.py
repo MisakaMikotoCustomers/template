@@ -18,6 +18,8 @@ user_bp = Blueprint('user', __name__)
 
 
 _HEX_CHARS = frozenset('0123456789abcdef')
+# 保留用户名，不允许注册
+_RESERVED_USERNAMES = frozenset({'admin'})
 
 
 def _is_client_hash(value: str) -> bool:
@@ -35,6 +37,7 @@ def _hash_password(client_hash: str) -> str:
 def register():
     data = request.get_json(silent=True) or {}
     username = (data.get('username') or '').strip()
+    normalized_username = username.lower()
     password = data.get('password') or ''
 
     if not username or not password:
@@ -42,6 +45,8 @@ def register():
 
     if len(username) > 64:
         return jsonify({'code': 400, 'message': '用户名最长64字符', 'data': None}), 400
+    if normalized_username in _RESERVED_USERNAMES:
+        return jsonify({'code': 403, 'message': '该用户名为系统保留账号，不允许注册', 'data': None}), 403
 
     # 前端负责在 hash 前做最小长度校验，后端只验证格式
     if not _is_client_hash(password):

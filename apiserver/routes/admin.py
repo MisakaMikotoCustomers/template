@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-管理后台路由（所有路由需要 X-Admin-Token 认证）
+管理后台路由（所有路由需要管理员身份）
 - POST /api/admin/product              - 新增商品
 - GET  /api/admin/products             - 商品列表（含已下架）
 - POST /api/admin/product/<id>/offline - 商品下架（软删除）

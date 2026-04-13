@@ -37,15 +37,11 @@ def _load_private_key(pem_content: str) -> RSAPrivateKey:
 
     # 已带 PEM 头尾，直接加载（可兼容 BEGIN PRIVATE KEY / BEGIN RSA PRIVATE KEY）
     if pem_content.startswith('-----'):
-        return serialization.load_pem_private_key(
-            pem_content.encode('utf-8'), password=None, backend=default_backend()
-        )
+        return serialization.load_pem_private_key(pem_content.encode('utf-8'), password=None, backend=default_backend())
 
     # 无 PEM 头尾时，先按 DER 解码后自动识别（PKCS8 / PKCS1）
     der_bytes = base64.b64decode(pem_content)
-    return serialization.load_der_private_key(
-        der_bytes, password=None, backend=default_backend()
-    )
+    return serialization.load_der_private_key(der_bytes, password=None, backend=default_backend())
 
 
 def _load_public_key(pem_content: str) -> RSAPublicKey:
@@ -101,11 +97,7 @@ def _build_sign_string(params: Dict, *, exclude_sign_type: bool = False) -> str:
 
 def _rsa2_sign(sign_string: str, private_key: RSAPrivateKey) -> str:
     """RSA2（SHA256withRSA）签名，返回 base64 字符串"""
-    signature = private_key.sign(
-        sign_string.encode('utf-8'),
-        padding.PKCS1v15(),
-        hashes.SHA256()
-    )
+    signature = private_key.sign(sign_string.encode('utf-8'), padding.PKCS1v15(), hashes.SHA256())
     return base64.b64encode(signature).decode('utf-8')
 
 
@@ -113,12 +105,7 @@ def _rsa2_verify(sign_string: str, signature_b64: str, public_key: RSAPublicKey)
     """RSA2 验签"""
     try:
         signature = base64.b64decode(signature_b64)
-        public_key.verify(
-            signature,
-            sign_string.encode('utf-8'),
-            padding.PKCS1v15(),
-            hashes.SHA256()
-        )
+        public_key.verify(signature, sign_string.encode('utf-8'), padding.PKCS1v15(), hashes.SHA256())
         return True
     except Exception as e:
         logger.warning("RSA2 verify failed: %s", e)
@@ -218,10 +205,7 @@ def decrypt_response_content(config: AlipayConfig, encrypted_content: str) -> Di
         raise ValueError("app_encrypt_key 未配置，无法解密支付宝响应内容")
 
     try:
-        plaintext = _aes_decrypt(
-            ciphertext_b64=encrypted_content,
-            key_b64=config.app_encrypt_key,
-        )
+        plaintext = _aes_decrypt(ciphertext_b64=encrypted_content, key_b64=config.app_encrypt_key)
         logger.debug("支付宝响应内容解密成功，长度=%d", len(plaintext))
         return json.loads(plaintext)
     except Exception as e:

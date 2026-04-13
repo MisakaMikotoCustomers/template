@@ -31,9 +31,9 @@ logging.basicConfig(
 from config_model import AppConfig
 from dao import init_database, remove_session
 from routes.auth_plugin import register_global_auth, skip_auth
-from routes.commercial import commercial_bp
-from routes.admin import admin_bp
-from routes.user import user_bp
+from routes.api.commercial import commercial_bp
+from routes.admin.admin import admin_bp
+from routes.api.user import user_bp
 
 
 def create_app(config: AppConfig) -> Flask:
@@ -112,11 +112,7 @@ def main():
     flask_app = create_app(config)
 
     print(f"Starting API Server on http://{config.server.host}:{config.server.port}")
-    flask_app.run(
-        host=config.server.host,
-        port=config.server.port,
-        debug=config.server.debug
-    )
+    flask_app.run(host=config.server.host, port=config.server.port, debug=config.server.debug)
 
 
 if __name__ == '__main__':

@@ -26,20 +26,11 @@ def upload_image(config: OssConfig, file_storage) -> str:
     ext = _get_extension(file_storage.filename or '', file_storage.content_type)
     object_key = f'product/icon/{uuid.uuid4().hex}{ext}'
 
-    cos_config = CosConfig(
-        Region=config.region,
-        SecretId=config.secret_id,
-        SecretKey=config.secret_key,
-    )
+    cos_config = CosConfig(Region=config.region, SecretId=config.secret_id, SecretKey=config.secret_key)
     client = CosS3Client(cos_config)
 
     file_data = file_storage.read()
-    client.put_object(
-        Bucket=config.bucket,
-        Body=file_data,
-        Key=object_key,
-        ContentType=file_storage.content_type,
-    )
+    client.put_object(Bucket=config.bucket, Body=file_data, Key=object_key, ContentType=file_storage.content_type)
 
     url = f'{config.base_url.rstrip("/")}/{object_key}'
     logger.info("OSS 上传成功: %s", url)

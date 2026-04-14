@@ -175,8 +175,7 @@ async function fetchOrders() {
 
   try {
     const res = await getOrders({
-      page: _currentPage,
-      pageSize: 20,
+      page: _currentPage, pageSize: 20,
       userId: userId ? parseInt(userId) : undefined,
       status: status || undefined,
     })

@@ -45,8 +45,7 @@ def create_order(user_id: int, product: Product, order_type: str) -> Order:
         order_type=order_type,
         expire_at=expire_at,
     )
-    logger.info("订单创建: user_id=%s, product_key=%s, out_trade_no=%s",
-                user_id, product.key, out_trade_no)
+    logger.info("订单创建: user_id=%s, product_key=%s, out_trade_no=%s", user_id, product.key, out_trade_no)
     return order
 
 

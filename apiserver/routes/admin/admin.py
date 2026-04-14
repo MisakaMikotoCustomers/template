@@ -103,8 +103,7 @@ def list_orders():
 
     user_id = int(user_id_str) if user_id_str else None
 
-    orders, total = order_dao.list_orders(page=page, page_size=page_size,
-                                          user_id=user_id, status=status)
+    orders, total = order_dao.list_orders(page=page, page_size=page_size, user_id=user_id, status=status)
     return jsonify({'code': 200, 'message': 'ok', 'data': {
         'total': total,
         'page': page,

@@ -55,27 +55,19 @@ async function request(path, options = {}) {
 async function hashPassword(plaintext) {
   const encoded = new TextEncoder().encode(plaintext)
   const hashBuffer = await crypto.subtle.digest('SHA-256', encoded)
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 // ── 用户接口 ──────────────────────────────────────────────────────
 
 export async function register(username, password) {
   const hashedPassword = await hashPassword(password)
-  return request('/user/register', {
-    method: 'POST',
-    body: JSON.stringify({ username, password: hashedPassword }),
-  })
+  return request('/user/register', { method: 'POST', body: JSON.stringify({ username, password: hashedPassword }) })
 }
 
 export async function login(username, password) {
   const hashedPassword = await hashPassword(password)
-  const data = await request('/user/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password: hashedPassword }),
-  })
+  const data = await request('/user/login', { method: 'POST', body: JSON.stringify({ username, password: hashedPassword }) })
   if (data?.code === 200) {
     setToken(data.data.token)
     localStorage.setItem('shop_user', JSON.stringify(data.data.user))
@@ -99,19 +91,14 @@ export async function getProducts() {
 }
 
 export async function buyProduct(productId, orderType = 'purchase', device = null) {
-  return request('/commercial/buy', {
-    method: 'POST',
-    body: JSON.stringify({ product_id: productId, order_type: orderType, device }),
-  })
+  const body = JSON.stringify({ product_id: productId, order_type: orderType, device })
+  return request('/commercial/buy', { method: 'POST', body })
 }
 
 // ── 管理接口 ──────────────────────────────────────────────────────
 
 export async function createProduct(payload) {
-  return request('/admin/product', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
+  return request('/admin/product', { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export async function getAdminProducts() {

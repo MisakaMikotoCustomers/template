@@ -6,8 +6,17 @@ FROM node:20-alpine AS builder
 ARG BUILD_TAG=dev
 WORKDIR /app
 
+# 走国内 npm 镜像，和下面 pip aliyun 镜像保持一致，避免跨境拉包慢/失败
+RUN npm config set registry https://registry.npmmirror.com
+
 COPY package.json package-lock.json* ./
-RUN npm ci --prefer-offline
+# 有 lock 文件走 ci（确定性安装，速度快）；没有则回退 install 并生成 lock。
+# 模板项目不强制提交 package-lock.json，用户 clone 后即可直接构建。
+RUN if [ -f package-lock.json ]; then \
+        npm ci --prefer-offline; \
+    else \
+        npm install --prefer-offline --no-audit --no-fund; \
+    fi
 
 COPY . .
 

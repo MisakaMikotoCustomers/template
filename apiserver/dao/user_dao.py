@@ -69,3 +69,27 @@ async def update_last_access(user_id: int) -> None:
             .where(User.user_id == user_id)
             .values(last_access_at=datetime.now(timezone.utc))
         )
+
+
+async def upsert_user_by_name(name: str, password_hash: str) -> User:
+    """按 name upsert 用户：存在则刷新 password_hash，不存在则创建并分配 user_id。
+
+    用于 special_accounts 启动时对齐 user 表；name 唯一索引是 DDL 约束，
+    并发插入冲突时由上层重试或容忍失败（启动期场景单进程即可）。
+    """
+    async with get_db_session() as session:
+        existing = await session.scalar(select(User).where(User.name == name))
+        if existing:
+            await session.execute(
+                update(User)
+                .where(User.id == existing.id)
+                .values(password_hash=password_hash)
+            )
+            await session.flush()
+            return existing
+        uid = await _allocate_unique_user_id(session)
+        user = User(name=name, password_hash=password_hash, user_id=uid)
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        return user

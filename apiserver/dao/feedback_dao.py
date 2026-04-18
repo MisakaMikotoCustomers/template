@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""反馈与反馈消息的异步 DAO"""
+"""反馈与反馈消息的异步 DAO
+
+注意：MySQL 不支持 `ORDER BY ... NULLS LAST`（那是 PostgreSQL/Oracle 语法），
+不要用 SQLAlchemy 的 `.nulls_last()` / `.nulls_first()`，否则会直接 1064 语法错。
+需要"NULL 排后面"的等价效果时，用 `col.is_(None)` 作为首个排序 key（ASC 时
+非 NULL 行 = 0 在前、NULL 行 = 1 在后）。
+"""
 
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
@@ -109,7 +115,7 @@ async def append_feedback_message(
         await session.execute(
             update(Feedback)
             .where(Feedback.id == fb.id)
-            .values(**update_fields)
+            .values(update_fields)
         )
         await session.flush()
         await session.refresh(msg)
@@ -193,7 +199,8 @@ async def list_feedbacks_by_user(
             select(Feedback)
             .where(Feedback.user_id == user_id)
             .order_by(
-                Feedback.last_message_at.desc().nulls_last(),
+                Feedback.last_message_at.is_(None),
+                Feedback.last_message_at.desc(),
                 Feedback.created_at.desc(),
             )
             .offset(offset)
@@ -223,7 +230,8 @@ async def list_all_feedbacks(
         result = await session.execute(
             list_stmt
             .order_by(
-                Feedback.last_message_at.desc().nulls_last(),
+                Feedback.last_message_at.is_(None),
+                Feedback.last_message_at.desc(),
                 Feedback.created_at.desc(),
             )
             .offset(offset)

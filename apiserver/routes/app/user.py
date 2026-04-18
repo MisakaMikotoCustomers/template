@@ -41,14 +41,18 @@ def _err(message: str, code: int):
 @router.post('/register')
 @skip_auth
 async def register(payload: UserCredentials, request: Request):
-    """注册接口（无需登录）。用户名黑名单从配置加载。"""
+    """注册接口（无需登录）。
+
+    注册黑名单 = 配置里 special_accounts 的 name 集合。
+    """
     config = _app_config(request)
+    reserved_names = [a.name for a in (config.auth.special_accounts or []) if a.name]
     try:
         info = await register_user(
             payload.name,
             payload.password_hash,
             session_expire_days=config.auth.session_expire_days,
-            username_blacklist=config.auth.username_blacklist,
+            reserved_names=reserved_names,
         )
     except UserServiceError as e:
         return _err(e.message, e.code)

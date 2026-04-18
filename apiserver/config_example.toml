@@ -43,6 +43,13 @@ echo = true
 [auth]
 # 登录会话（token）有效期（天）
 session_expire_days = 7
-# 注册用户名黑名单（大小写不敏感，完全匹配）
-# admin 是系统保留账号，任何情况下都不允许注册
-username_blacklist = ["admin", "root", "system", "superuser"]
+
+# 特殊账号（平台保留 + 内置管理员）：
+# - 这里的 name 会自动成为注册黑名单（大小写不敏感，完全匹配），
+#   普通用户无法注册与之重名的账号（admin 走这个机制保留）。
+# - 应用每次启动会按 name 对齐 user 表：存在则更新 password_hash（明文 SHA-256），
+#   不存在则新建。password 存在这里请填明文，库里只存哈希值。
+# - 至少需要保留 name = "admin" 的条目，否则 /api/admin/* 将无可用账号。
+[[auth.special_accounts]]
+name = "admin"
+password = "changeme"

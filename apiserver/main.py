@@ -20,6 +20,7 @@ import asyncio
 import logging
 import os
 import sys
+import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -44,6 +45,7 @@ from routes.app.secret import router as app_secret_router
 from routes.app.user import router as app_user_router
 from routes.auth_plugin import register_auth, skip_auth
 from routes.open.ping import router as open_ping_router
+from service.user_service import sync_special_accounts
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,6 +74,8 @@ def create_app(config: AppConfig) -> FastAPI:
             'Database initialized: %s:%s/%s',
             config.database.url, config.database.port, config.database.database,
         )
+        # 特殊账号 upsert：依赖 user 表已建好，必须在 init_database 之后
+        await sync_special_accounts(config.auth.special_accounts)
         yield
         await dispose_engine()
         logger.info('Database engine disposed')
@@ -116,7 +120,25 @@ def create_app(config: AppConfig) -> FastAPI:
     # 鉴权中间件必须最后注册（最外层）：这样它能拦到其他中间件之后的请求并注入 traceId
     register_auth(app, api_prefix=api_prefix)
 
-    # 统一异常处理：所有 /api 下的异常都转换成 {code,message,data} 结构
+    # 统一异常处理：所有 /api 下的异常都转换成 {code,message,data} 结构。
+    # 为方便排查线上问题，500 系错误会把原始异常类型 + 消息 + traceback 放进
+    # `data.debug`（结构化），前端可直接拿来展示，而不是面对一句"服务器内部错误"
+    # 还得翻 docker logs。生产级部署若不希望把堆栈透出给终端用户，可把下方
+    # `_build_debug_payload` 改为返回 None 或按 request 开关控制。
+    def _build_debug_payload(exc: BaseException) -> dict:
+        """把异常压成结构化 debug 载荷（类型、消息、完整 traceback）。"""
+        tb_list = traceback.format_exception(type(exc), exc, exc.__traceback__)
+        cause = exc.__cause__ or exc.__context__
+        return {
+            'type': f'{type(exc).__module__}.{type(exc).__name__}',
+            'message': str(exc),
+            'traceback': ''.join(tb_list),
+            'cause': (
+                f'{type(cause).__module__}.{type(cause).__name__}: {cause}'
+                if cause is not None and cause is not exc else None
+            ),
+        }
+
     @app.exception_handler(StarletteHTTPException)
     async def _http_exc_handler(request: Request, exc: StarletteHTTPException):
         trace_id = getattr(request.state, 'trace_id', '') or ''
@@ -129,9 +151,18 @@ def create_app(config: AppConfig) -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def _validation_exc_handler(request: Request, exc: RequestValidationError):
         trace_id = getattr(request.state, 'trace_id', '') or ''
+        errors = exc.errors()
+        first = errors[0] if errors else {}
+        loc = '.'.join(str(x) for x in (first.get('loc') or []))
+        detail_msg = first.get('msg') or '请求参数校验失败'
+        message = f'请求参数校验失败：{loc} {detail_msg}' if loc else f'请求参数校验失败：{detail_msg}'
         return JSONResponse(
             status_code=400,
-            content={'code': 400, 'message': '请求参数校验失败', 'data': exc.errors()},
+            content={
+                'code': 400,
+                'message': message,
+                'data': {'errors': errors, 'debug': _build_debug_payload(exc)},
+            },
             headers={'traceId': trace_id} if trace_id else None,
         )
 
@@ -139,9 +170,12 @@ def create_app(config: AppConfig) -> FastAPI:
     async def _unhandled_exc_handler(request: Request, exc: Exception):
         logger.exception('Unhandled exception: %s', exc)
         trace_id = getattr(request.state, 'trace_id', '') or ''
+        debug = _build_debug_payload(exc)
+        # message 直接带上原始异常信息，前端不展开 debug 也能看到核心原因
+        message = f'[{type(exc).__name__}] {str(exc) or "服务器内部错误"}'
         return JSONResponse(
             status_code=500,
-            content={'code': 500, 'message': '服务器内部错误', 'data': None},
+            content={'code': 500, 'message': message, 'data': {'debug': debug}},
             headers={'traceId': trace_id} if trace_id else None,
         )
 

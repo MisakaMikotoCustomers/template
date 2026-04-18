@@ -4,6 +4,10 @@
 
 * { box-sizing: border-box; }
 
+/* 让 HTML `hidden` 属性始终生效：避免后续带 display: flex/grid 的类
+   因同等特异性而覆盖浏览器默认的 [hidden]{display:none} 规则。 */
+[hidden] { display: none !important; }
+
 html, body {
     margin: 0;
     padding: 0;

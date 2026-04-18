@@ -60,11 +60,23 @@ class DatabaseConfig:
 
 
 @dataclass
+class SpecialAccountConfig:
+    """特殊账号（内置/保留账号）：启动时按 name 对齐 user 表，自动成为注册黑名单。"""
+    name: str = ""
+    # 明文密码。启动时会用 SHA-256 哈希后写入 user.password_hash，
+    # 与前端登录提交的 password_hash（浏览器端 SHA-256）保持同一编码。
+    password: str = ""
+
+
+@dataclass
 class AuthConfig:
     """鉴权相关配置"""
     session_expire_days: int = 7
-    # 注册黑名单：以下用户名（大小写不敏感，完全匹配）禁止被注册
-    username_blacklist: List[str] = field(default_factory=lambda: ["admin"])
+    # 特殊账号列表：
+    # - name 集合会作为注册黑名单（大小写不敏感）
+    # - 启动时会自动 upsert 到 user 表（password → SHA-256）
+    # - 默认至少保留一个 admin；为空也允许，但会失去管理端登录入口
+    special_accounts: List[SpecialAccountConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -78,10 +90,22 @@ class AppConfig:
     def from_toml(cls, path: str) -> "AppConfig":
         with open(path, "rb") as f:
             data = tomllib.load(f)
+        auth_raw = dict(data.get("auth") or {})
+        # special_accounts 在 TOML 中是 [[auth.special_accounts]]，即 list[dict]；
+        # 要手动转成 dataclass 实例，否则 AuthConfig(**auth_raw) 会塞一堆 dict 进去
+        raw_accounts = auth_raw.pop("special_accounts", []) or []
+        accounts = [
+            SpecialAccountConfig(
+                name=str(item.get("name") or ""),
+                password=str(item.get("password") or ""),
+            )
+            for item in raw_accounts
+            if isinstance(item, dict)
+        ]
         return cls(
             server=ServerConfig(**data.get("server", {})),
             database=DatabaseConfig(**data.get("database", {})),
-            auth=AuthConfig(**data.get("auth", {})),
+            auth=AuthConfig(**auth_raw, special_accounts=accounts),
         )
 
     @classmethod

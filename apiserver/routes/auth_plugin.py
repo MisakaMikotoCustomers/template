@@ -20,6 +20,7 @@
 """
 
 import logging
+import traceback
 import uuid
 from typing import Awaitable, Callable, Optional
 
@@ -64,10 +65,24 @@ def _endpoint_skip_auth(request: Request) -> bool:
 
 # ============================== 工具 ==============================
 
-def _json_error(code: int, message: str, trace_id: str) -> JSONResponse:
+def _json_error(
+    code: int, message: str, trace_id: str, exc: Optional[BaseException] = None,
+) -> JSONResponse:
+    """统一的鉴权失败 JSON 响应。当提供 exc 时，会把原始异常堆栈塞进 data.debug
+    （与 main.py 的全局异常处理器语义对齐），前端可直接展示原因。"""
+    data = None
+    if exc is not None:
+        tb_list = traceback.format_exception(type(exc), exc, exc.__traceback__)
+        data = {
+            'debug': {
+                'type': f'{type(exc).__module__}.{type(exc).__name__}',
+                'message': str(exc),
+                'traceback': ''.join(tb_list),
+            }
+        }
     return JSONResponse(
         status_code=code,
-        content={'code': code, 'message': message, 'data': None},
+        content={'code': code, 'message': message, 'data': data},
         headers={'traceId': trace_id},
     )
 
@@ -105,7 +120,7 @@ async def _authenticate_by_token(request: Request, trace_id: str) -> Optional[JS
             return _json_error(401, '无效的认证信息', trace_id)
     except Exception as e:
         logger.error('Token验证异常 traceId=%s err=%s', trace_id, e, exc_info=True)
-        return _json_error(500, '认证服务异常', trace_id)
+        return _json_error(500, f'认证服务异常：[{type(e).__name__}] {e}', trace_id, exc=e)
 
     request.state.user = user
     request.state.token = token
@@ -129,7 +144,7 @@ async def _authenticate_by_secret(request: Request, trace_id: str) -> Optional[J
             return _json_error(401, '无效的秘钥', trace_id)
     except Exception as e:
         logger.error('秘钥验证异常 traceId=%s err=%s', trace_id, e, exc_info=True)
-        return _json_error(500, '认证服务异常', trace_id)
+        return _json_error(500, f'认证服务异常：[{type(e).__name__}] {e}', trace_id, exc=e)
 
     request.state.user = user
 

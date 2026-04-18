@@ -68,6 +68,22 @@ async function request(path, options = {}) {
         const msg = (data && (data.message || data.error)) || `请求失败 (${resp.status})`;
         const err = new Error(msg);
         err.code = (data && data.code) || resp.status;
+        // 后端（main.py 的全局异常 handler / auth_plugin._json_error）在服务端
+        // 异常时会把原始 type/message/traceback 放进 data.debug；挂到 err 上，
+        // 并且自动弹出调试浮层，便于直接定位问题而不必翻服务端日志。
+        const debug = data && data.data && data.data.debug;
+        if (debug) {
+            err.debug = debug;
+            const traceId = resp.headers.get('traceId') || '';
+            try {
+                showDebugPanel({
+                    title: `${options.method || 'GET'} ${path} (${resp.status})`,
+                    message: msg,
+                    debug,
+                    traceId,
+                });
+            } catch (_) { /* showDebugPanel 不可用时不影响主流程 */ }
+        }
         throw err;
     }
     return data;

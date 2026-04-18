@@ -151,7 +151,7 @@
             const { items, total } = resp.data;
             state.feedbackTotal = total || 0;
             if (!items || items.length === 0) {
-                listEl.innerHTML = '<div class="empty-placeholder">暂无反馈，点击右上角"新增反馈"开始吧</div>';
+                listEl.innerHTML = '<div class="empty-placeholder">当前暂无反馈</div>';
             } else {
                 listEl.innerHTML = items.map(renderUserFeedbackCard).join('');
                 listEl.querySelectorAll('.feedback-item').forEach(el => {

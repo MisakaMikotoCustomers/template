@@ -2,24 +2,34 @@
 # -*- coding: utf-8 -*-
 """
 SQLAlchemy ORM 模型定义
+
+- 用户表：user_id 是 8 位随机整数（首位 1-9），所有跨表关联都用 user_id
+- 反馈表：feedback_key 是 8 位随机字符串（大小写字母+数字），(user_id, feedback_key) 唯一
 """
 
 from datetime import datetime, timezone
-from decimal import Decimal
+from typing import Optional  # noqa: F401 (used in type hints inside method signatures)
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Text, Boolean,
-    Numeric, Index, func, BigInteger
+    BigInteger,
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
+    """ORM 基类"""
     pass
 
 
-def to_iso_utc(dt: datetime):
-    """统一将 datetime 序列化为 UTC ISO8601 字符串"""
+def to_iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    """统一将 datetime 序列化为 UTC ISO8601 字符串。"""
     if not dt:
         return None
     if dt.tzinfo is None:
@@ -31,120 +41,158 @@ def to_iso_utc(dt: datetime):
 
 class User(Base):
     """用户表"""
-    __tablename__ = 'shop_users'
+    __tablename__ = 'tpl_users'
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    username = Column(String(64), nullable=False, comment='用户名')
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(
+        BigInteger, nullable=False, unique=True,
+        comment='对外用户编号（8位随机整数，首位非0），所有跨表关联都用此列'
+    )
+    name = Column(String(64), nullable=False, comment='用户名（唯一）')
     password_hash = Column(String(256), nullable=False, comment='密码哈希')
     created_at = Column(DateTime, server_default=func.utc_timestamp(), comment='创建时间')
-    updated_at = Column(DateTime, server_default=func.utc_timestamp(),
-                        onupdate=func.utc_timestamp(), comment='更新时间')
+    updated_at = Column(
+        DateTime, server_default=func.utc_timestamp(),
+        onupdate=func.utc_timestamp(), comment='更新时间'
+    )
+    last_access_at = Column(DateTime, nullable=True, comment='最后访问时间')
 
     __table_args__ = (
-        Index('uk_users_username', 'username', unique=True),
+        Index('uk_tpl_users_name', 'name', unique=True),
+        Index('uk_tpl_users_user_id', 'user_id', unique=True),
     )
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
-            'id': self.id,
-            'username': self.username,
+            'user_id': self.user_id,
+            'name': self.name,
             'created_at': to_iso_utc(self.created_at),
+            'last_access_at': to_iso_utc(self.last_access_at),
         }
 
 
 class UserSession(Base):
-    """用户会话表"""
-    __tablename__ = 'shop_user_sessions'
+    """用户会话（token）表"""
+    __tablename__ = 'tpl_user_sessions'
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, nullable=False, comment='用户ID')
-    token = Column(String(255), nullable=False, comment='Token')
-    expires_at = Column(DateTime, nullable=False, comment='过期时间')
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, comment='对外 user_id')
+    token = Column(String(128), nullable=False, comment='Bearer token')
+    expires_at = Column(DateTime, nullable=False, comment='过期时间（UTC）')
     created_at = Column(DateTime, server_default=func.utc_timestamp(), comment='创建时间')
 
     __table_args__ = (
-        Index('uk_sessions_token', 'token', unique=True),
-        Index('idx_sessions_user_id', 'user_id'),
+        Index('uk_tpl_sessions_token', 'token', unique=True),
+        Index('idx_tpl_sessions_user_id', 'user_id'),
     )
 
 
-class Product(Base):
-    """商品表"""
-    __tablename__ = 'shop_products'
+class UserSecret(Base):
+    """用户秘钥表（open 接口鉴权用）"""
+    __tablename__ = 'tpl_user_secrets'
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    key = Column(String(64), nullable=False, comment='商品唯一 key')
-    title = Column(String(128), nullable=False, comment='商品名称')
-    desc = Column(Text, nullable=True, comment='商品描述（富文本 HTML）')
-    price = Column(Numeric(10, 2), nullable=False, comment='价格（元）')
-    expire_time = Column(Integer, nullable=True, comment='购买后有效时长（秒），NULL 表示永久')
-    support_continue = Column(Boolean, nullable=False, default=False, comment='是否支持续费')
-    icon = Column(String(512), nullable=True, comment='商品封面图 URL')
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, comment='对外 user_id')
+    name = Column(String(64), nullable=False, comment='秘钥名称/用途')
+    secret = Column(String(128), nullable=False, comment='随机秘钥')
     created_at = Column(DateTime, server_default=func.utc_timestamp(), comment='创建时间')
-    updated_at = Column(DateTime, server_default=func.utc_timestamp(),
-                        onupdate=func.utc_timestamp(), comment='更新时间')
-    deleted_at = Column(DateTime, nullable=True, comment='删除时间（软删除）')
+    last_used_at = Column(DateTime, nullable=True, comment='最近使用时间')
+    deleted_at = Column(DateTime, nullable=True, comment='软删除时间，不为空即已删除')
 
     __table_args__ = (
-        Index('uk_products_key', 'key', unique=True),
+        Index('uk_tpl_secrets_secret', 'secret', unique=True),
+        Index('idx_tpl_secrets_user_id', 'user_id'),
     )
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             'id': self.id,
-            'key': self.key,
+            'name': self.name,
+            'secret': self.secret,
+            'created_at': to_iso_utc(self.created_at),
+            'last_used_at': to_iso_utc(self.last_used_at),
+        }
+
+
+class Feedback(Base):
+    """用户反馈（会话）表
+
+    一个反馈 = 一条会话，包含多条用户/管理员沟通记录（见 FeedbackMessage）。
+    (user_id, feedback_key) 唯一；admin 通过这两个字段定位任意用户的反馈会话。
+    """
+    __tablename__ = 'tpl_feedbacks'
+
+    STATUS_OPEN = 'open'                # 待处理（新建默认）
+    STATUS_PROCESSING = 'processing'    # 处理中
+    STATUS_RESOLVED = 'resolved'        # 已解决
+    STATUS_CLOSED = 'closed'            # 已关闭
+    ALLOWED_STATUS = (STATUS_OPEN, STATUS_PROCESSING, STATUS_RESOLVED, STATUS_CLOSED)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, comment='提交者的对外 user_id')
+    feedback_key = Column(
+        String(8), nullable=False,
+        comment='8 位随机字符串（大小写字母+数字），(user_id, feedback_key) 唯一'
+    )
+    title = Column(String(128), nullable=True, comment='会话标题（由首条消息摘要自动生成）')
+    status = Column(
+        String(16), nullable=False, default=STATUS_OPEN,
+        server_default=STATUS_OPEN, comment='会话状态 open/processing/resolved/closed'
+    )
+    last_message_at = Column(DateTime, nullable=True, comment='最近一条消息时间')
+    created_at = Column(DateTime, server_default=func.utc_timestamp(), comment='创建时间')
+    updated_at = Column(
+        DateTime, server_default=func.utc_timestamp(),
+        onupdate=func.utc_timestamp(), comment='更新时间'
+    )
+
+    __table_args__ = (
+        Index('uk_tpl_feedback_user_key', 'user_id', 'feedback_key', unique=True),
+        Index('idx_tpl_feedback_user_id', 'user_id'),
+        Index('idx_tpl_feedback_status', 'status'),
+    )
+
+    def to_dict(self, last_message: Optional[str] = None) -> dict:
+        return {
+            'feedback_key': self.feedback_key,
+            'user_id': self.user_id,
             'title': self.title,
-            'desc': self.desc or '',
-            'price': float(self.price) if self.price is not None else 0.0,
-            'expire_time': self.expire_time,
-            'support_continue': bool(self.support_continue),
-            'icon': self.icon or '',
+            'status': self.status,
+            'last_message': last_message,
+            'last_message_at': to_iso_utc(self.last_message_at),
             'created_at': to_iso_utc(self.created_at),
             'updated_at': to_iso_utc(self.updated_at),
         }
 
 
-class Order(Base):
-    """订单表"""
-    __tablename__ = 'shop_orders'
+class FeedbackMessage(Base):
+    """反馈会话中的一条消息（用户或管理员发送）"""
+    __tablename__ = 'tpl_feedback_messages'
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, nullable=False, comment='用户ID')
-    product_id = Column(BigInteger, nullable=False, comment='商品ID')
-    product_key = Column(String(64), nullable=False, comment='商品 key（冗余）')
-    out_trade_no = Column(String(64), nullable=False, comment='商户订单号（唯一）')
-    trade_no = Column(String(64), nullable=True, comment='第三方平台交易号')
-    status = Column(String(20), nullable=False, default='pending', comment='订单状态')
-    amount = Column(Numeric(10, 2), nullable=False, comment='实付金额（元）')
-    order_type = Column(String(16), nullable=False, default='purchase', comment='purchase/renew')
-    expire_at = Column(DateTime, nullable=True, comment='权益到期时间')
+    SENDER_USER = 'user'
+    SENDER_ADMIN = 'admin'
+    ALLOWED_SENDER = (SENDER_USER, SENDER_ADMIN)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(
+        BigInteger, nullable=False,
+        comment='会话所属用户的 user_id（反馈归属用户，非发送者）'
+    )
+    feedback_key = Column(String(8), nullable=False, comment='所属反馈会话 key')
+    sender_type = Column(String(16), nullable=False, comment='user / admin')
+    sender_name = Column(String(64), nullable=True, comment='发送者用户名快照（展示用）')
+    content = Column(Text, nullable=False, comment='消息正文')
     created_at = Column(DateTime, server_default=func.utc_timestamp(), comment='创建时间')
-    updated_at = Column(DateTime, server_default=func.utc_timestamp(),
-                        onupdate=func.utc_timestamp(), comment='更新时间')
-
-    STATUS_PENDING = 'pending'
-    STATUS_PAID = 'paid'
-    STATUS_FAILED = 'failed'
-    STATUS_REFUNDED = 'refunded'
 
     __table_args__ = (
-        Index('uk_orders_out_trade_no', 'out_trade_no', unique=True),
-        Index('idx_orders_user_id', 'user_id'),
-        Index('idx_orders_status', 'status'),
+        Index('idx_tpl_fb_msg_session', 'user_id', 'feedback_key', 'id'),
     )
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             'id': self.id,
-            'user_id': self.user_id,
-            'product_id': self.product_id,
-            'product_key': self.product_key,
-            'out_trade_no': self.out_trade_no,
-            'trade_no': self.trade_no or '',
-            'status': self.status,
-            'amount': float(self.amount) if self.amount is not None else 0.0,
-            'order_type': self.order_type,
-            'expire_at': to_iso_utc(self.expire_at),
+            'sender_type': self.sender_type,
+            'sender_name': self.sender_name,
+            'content': self.content,
             'created_at': to_iso_utc(self.created_at),
-            'updated_at': to_iso_utc(self.updated_at),
         }

@@ -1,51 +1,71 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-用户 DAO - 纯数据库操作
+用户数据访问对象（异步）
+
+- 8 位 user_id 随机生成：10000000 ~ 99999999（首位 1-9）
+- 所有跨表关联使用 user_id
 """
 
-import secrets
-from datetime import datetime, timezone, timedelta
+import random
+from datetime import datetime, timezone
 from typing import Optional
 
-from .connection import get_session
-from .models import User, UserSession
+from sqlalchemy import select, update
+
+from .connection import get_db_session
+from .models import User
 
 
-def get_user_by_username(username: str) -> Optional[User]:
-    session = get_session()
-    return session.query(User).filter(User.username == username).first()
+def _random_public_user_id() -> int:
+    """8 位随机整数，首位 1-9。"""
+    return random.randint(10_000_000, 99_999_999)
 
 
-def get_user_by_id(user_id: int) -> Optional[User]:
-    session = get_session()
-    return session.query(User).filter(User.id == user_id).first()
+async def _allocate_unique_user_id(session) -> int:
+    """在事务内尝试分配一个不冲突的 8 位 user_id。"""
+    for _ in range(500):
+        uid = _random_public_user_id()
+        exists = await session.scalar(
+            select(User.id).where(User.user_id == uid).limit(1)
+        )
+        if not exists:
+            return uid
+    raise RuntimeError('无法生成唯一的 8 位 user_id，请稍后重试')
 
 
-def create_user(username: str, password_hash: str) -> User:
-    session = get_session()
-    user = User(username=username, password_hash=password_hash)
-    session.add(user)
-    session.flush()
-    return user
+async def create_user(name: str, password_hash: str) -> User:
+    """创建用户并自动分配 user_id。"""
+    async with get_db_session() as session:
+        uid = await _allocate_unique_user_id(session)
+        user = User(name=name, password_hash=password_hash, user_id=uid)
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        return user
 
 
-def create_session(user_id: int, expire_days: int = 30) -> UserSession:
-    """创建用户 Token 会话"""
-    session = get_session()
-    token = secrets.token_hex(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=expire_days)
-    user_session = UserSession(user_id=user_id, token=token, expires_at=expires_at)
-    session.add(user_session)
-    session.flush()
-    return user_session
+async def get_user_by_name(name: str) -> Optional[User]:
+    async with get_db_session() as session:
+        return await session.scalar(select(User).where(User.name == name))
 
 
-def get_session_by_token(token: str) -> Optional[UserSession]:
-    """校验 Token 是否有效（未过期）"""
-    session = get_session()
-    now = datetime.now(timezone.utc)
-    return (session.query(UserSession)
-            .filter(UserSession.token == token,
-                    UserSession.expires_at > now)
-            .first())
+async def get_user_by_user_id(user_id: int) -> Optional[User]:
+    """通过对外 user_id 获取用户。"""
+    async with get_db_session() as session:
+        return await session.scalar(select(User).where(User.user_id == user_id))
+
+
+async def check_user_name_exists(name: str) -> bool:
+    async with get_db_session() as session:
+        row = await session.scalar(select(User.id).where(User.name == name).limit(1))
+        return row is not None
+
+
+async def update_last_access(user_id: int) -> None:
+    async with get_db_session() as session:
+        await session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(last_access_at=datetime.now(timezone.utc))
+        )

@@ -1,14 +1,24 @@
-# 商品支付模板 - Web 前端配置文件
+# ============================================================
+# Template Web 前端配置示例
+# ------------------------------------------------------------
+# 启动时读取优先级：
+#   1) 环境变量 APP_CONFIG_PATH 指定的路径
+#   2) 默认路径 /config/config.toml
+#
+# 本配置供 entrypoint.sh 运行时生成 /app/config.json，
+# 前端 api.js 会从 /config.json 读取后端地址与展示名称。
+# ============================================================
 
 [server]
-# 监听地址
+# 监听地址 & 端口（供 nginx 使用；当前模板默认写死 8080）
 host = "0.0.0.0"
-# 前端服务端口
-port = 8081
+port = 8080
+# 网页前端项目展示名称（页面标题、侧边栏品牌等处使用）
+name = "Template"
 
 [apiserver]
-# 后端 API Server 主机地址
-host = "http://your-api-server.com"
-# 后端 API 路径前缀
+# 后端 API 主机地址（协议+域名/IP+端口）。
+# 留空即表示后端与前端同域，由 nginx/反代把 /api 前缀转给 apiserver。
+host = ""
+# 后端 API 路径前缀（需和 apiserver 的 server.url_prefix + "/api" 对齐）
 path_prefix = "/api"
-

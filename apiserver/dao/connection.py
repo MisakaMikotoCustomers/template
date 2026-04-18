@@ -1,75 +1,84 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-SQLAlchemy 数据库连接管理
+SQLAlchemy 2.0 async 连接管理（aiomysql）
+
+- 全局一个 AsyncEngine + async_sessionmaker
+- 通过 get_db_session() async context manager 获取会话
+- 所有 DAO 必须使用 async/await，避免阻塞事件循环
 """
 
-from contextlib import contextmanager
-from typing import Generator
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session, Session
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from config_model import DatabaseConfig
 
-_engine = None
-_session_factory = None
-_scoped_session = None
+_engine: Optional[AsyncEngine] = None
+_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
 
 
-def init_connection(config: DatabaseConfig):
-    """初始化数据库连接池"""
-    global _engine, _session_factory, _scoped_session
+def init_engine(config: DatabaseConfig) -> AsyncEngine:
+    """创建全局 AsyncEngine。幂等。"""
+    global _engine, _session_maker
+    if _engine is not None:
+        return _engine
 
     if config.type != "mysql":
-        raise ValueError(f"Unsupported database type: {config.type}")
+        raise ValueError(f"暂不支持的数据库类型: {config.type}，请使用 mysql")
 
-    connection_url = (
-        f"mysql+pymysql://{config.username}:{config.password}"
-        f"@{config.url}:{config.port}/{config.database}?charset=utf8mb4"
-    )
-
-    _engine = create_engine(
-        connection_url,
-        echo=False,
-        pool_size=20,
-        max_overflow=40,
-        pool_timeout=30,
-        pool_recycle=3600,
+    _engine = create_async_engine(
+        config.async_url(),
+        echo=config.echo,
+        pool_size=config.pool_size,
+        max_overflow=config.max_overflow,
+        pool_recycle=config.pool_recycle,
         pool_pre_ping=True,
-        connect_args={"init_command": "SET SESSION time_zone='+00:00'"}
+        future=True,
     )
-
-    _session_factory = sessionmaker(bind=_engine, expire_on_commit=False)
-    _scoped_session = scoped_session(_session_factory)
-
-    print(f"Database engine initialized: {config.url}:{config.port}/{config.database}")
-
-
-def get_engine():
-    if _engine is None:
-        raise RuntimeError("Database not initialized. Call init_connection first.")
+    _session_maker = async_sessionmaker(
+        _engine, expire_on_commit=False, class_=AsyncSession
+    )
     return _engine
 
 
-def get_session() -> Session:
-    if _scoped_session is None:
-        raise RuntimeError("Database not initialized. Call init_connection first.")
-    return _scoped_session()
+def get_engine() -> AsyncEngine:
+    if _engine is None:
+        raise RuntimeError("数据库未初始化，请先调用 init_engine()")
+    return _engine
 
 
-def remove_session():
-    if _scoped_session is not None:
-        _scoped_session.remove()
+@asynccontextmanager
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """统一的异步 Session 上下文管理器。
 
+    - 正常退出 commit
+    - 异常回滚并抛出
+    """
+    if _session_maker is None:
+        raise RuntimeError("数据库未初始化，请先调用 init_engine()")
 
-@contextmanager
-def get_db_session() -> Generator[Session, None, None]:
-    """上下文管理器形式获取 Session，自动提交/回滚"""
-    session = get_session()
+    session = _session_maker()
     try:
         yield session
-        session.commit()
+        await session.commit()
     except Exception:
-        session.rollback()
+        await session.rollback()
         raise
+    finally:
+        await session.close()
+
+
+async def dispose_engine() -> None:
+    """优雅关停 engine（FastAPI shutdown 调用）。"""
+    global _engine, _session_maker
+    if _engine is not None:
+        await _engine.dispose()
+        _engine = None
+        _session_maker = None

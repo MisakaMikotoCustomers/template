@@ -1,39 +1,29 @@
-# 多阶段构建：Node 打包前端 + Python 服务静态文件
-
-# ── Stage 1: 构建前端 ────────────────────────────────────────────
-FROM node:20-alpine AS builder
-
-ARG BUILD_TAG=dev
-WORKDIR /app
-
-COPY package.json package-lock.json* ./
-RUN npm ci --prefer-offline
-
-COPY . .
-
-# 将 BUILD_TAG 传入 Vite 构建，注入到前端代码中
-RUN VITE_BUILD_TAG=${BUILD_TAG} npm run build
-
-# ── Stage 2: Flask 服务静态文件 ──────────────────────────────────
-FROM python:3.11-slim
+FROM nginx:alpine
 
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_DEFAULT_TIMEOUT=120
+# 整个 web 目录拷进去（后面会剔除非静态文件）
+COPY . /app
 
-RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
-    pip config unset global.extra-index-url || true && \
-    pip config set global.trusted-host mirrors.aliyun.com
+# 1) nginx 配置 / 启动脚本 移出静态目录，避免被外部访问
+# 2) 清理掉不应该对外暴露的文件
+# 3) 接受 BUILD_VERSION 构建参数做缓存破坏
+# 注：HTML 里静态资源引用形如 ?v=dev，构建时统一替换为真实版本号
+RUN mv /app/nginx.conf /etc/nginx/conf.d/default.conf && \
+    mv /app/entrypoint.sh /entrypoint.sh && \
+    chmod +x /entrypoint.sh && \
+    rm -f /app/Dockerfile /app/*.toml && \
+    rm -rf /app/.git /app/.gitignore
 
-RUN pip install --retries 10 flask
-RUN pip install --retries 10 gunicorn
-RUN pip install --retries 10 tomli
+ARG BUILD_VERSION=dev
+ENV BUILD_VERSION=${BUILD_VERSION}
 
-# 拷贝构建产物和 Python 服务文件
-COPY --from=builder /app/dist /app/dist
-COPY config_model.py main.py ./
+# 把 HTML 里的 ?v=xxx 替换为构建版本，保证静态资源缓存失效
+RUN find /app -name '*.html' -exec sed -i "s/?v=[0-9A-Za-z_.-]*/?v=${BUILD_VERSION}/g" {} + && \
+    echo "[build] applied BUILD_VERSION=${BUILD_VERSION}"
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8081", "--workers", "2", "main:app"]
+ENV APP_CONFIG_PATH=/config/config.toml
+
+EXPOSE 8080
+
+ENTRYPOINT ["/entrypoint.sh"]

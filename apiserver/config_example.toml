@@ -1,12 +1,22 @@
-# 商品支付模板 - API Server 配置文件
+# ============================================================
+# Template API Server 配置示例
+# ------------------------------------------------------------
+# 启动时读取优先级：
+#   1) 环境变量 APP_CONFIG_PATH 指定的路径
+#   2) 默认路径 /config/config.toml
+# ============================================================
 
 [server]
-# 监听地址: "0.0.0.0" 允许外部访问, "127.0.0.1" 仅本机
+# 监听地址："0.0.0.0" 允许外部访问，"127.0.0.1" 仅本机
 host = "0.0.0.0"
-# 服务端口
+# 监听端口
 port = 8080
-# 调试模式（生产环境请设为 false）
-debug = false
+# URL 前缀，默认不加；例如 "/v1"
+url_prefix = ""
+# uvicorn worker 进程数。I/O 密集型建议 1；CPU 密集可按核数调大
+workers = 1
+# 日志级别：debug/info/warning/error
+log_level = "info"
 
 [database]
 # 数据库类型（目前仅支持 mysql）
@@ -18,40 +28,21 @@ port = 3306
 # 用户名
 username = "root"
 # 密码
-password = "your-db-password"
-# 数据库名
-database = "shop"
+password = ""
+# 库名（启动时如不存在会自动建表；库本身需预先存在）
+database = "template"
+# 异步连接池大小
+pool_size = 20
+# 允许超出 pool_size 后额外创建的连接数
+max_overflow = 10
+# 连接回收时间（秒）
+pool_recycle = 3600
+# 是否打印 SQL（调试用）
+echo = true
 
-[alipay]
-# 支付宝应用 ID
-app_id = "your-alipay-app-id"
-# 应用 RSA2 私钥（PKCS8 格式，不含 -----BEGIN/END PRIVATE KEY----- 头尾，无换行）
-app_private_key = "your-app-private-key"
-# 支付宝公钥（不含头尾，无换行）
-alipay_public_key = "your-alipay-public-key"
-# 接口内容 AES 加密密钥（Base64 格式，在支付宝开放平台"开发设置-接口加签方式"中获取）
-# 选填。配置后，接口请求/响应的 biz_content 将使用 AES-128-CBC 加密，提升传输安全性。
-# 使用"获取会员手机号"等敏感能力时必填。
-app_encrypt_key = ""
-# 支付宝异步通知回调 URL（必须公网可访问）
-notify_url = "https://your-domain.com/api/commercial/alipay/notify"
-# 支付完成后同步跳转 URL
-return_url = "https://your-domain.com/pay/result"
-# 支付宝网关（生产环境）
-gateway = "https://openapi.alipay.com/gateway.do"
-# 是否使用沙箱环境
-sandbox = false
-
-[oss]
-# 是否启用 OSS（腾讯云 COS）
-enabled = false
-# 腾讯云 SecretId
-secret_id = "your-secret-id"
-# 腾讯云 SecretKey
-secret_key = "your-secret-key"
-# 地域
-region = "ap-guangzhou"
-# Bucket 名称（含 AppId 后缀，如 mybucket-1234567890）
-bucket = "your-bucket-1234567890"
-# 公开访问域名前缀
-base_url = "https://your-bucket-1234567890.cos.ap-guangzhou.myqcloud.com"
+[auth]
+# 登录会话（token）有效期（天）
+session_expire_days = 7
+# 注册用户名黑名单（大小写不敏感，完全匹配）
+# admin 是系统保留账号，任何情况下都不允许注册
+username_blacklist = ["admin", "root", "system", "superuser"]

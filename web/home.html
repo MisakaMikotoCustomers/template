@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="css/style.css?v=dev">
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <div class="sidebar-top">
+            <div class="sidebar-brand" id="brandName">Template</div>
+            <nav class="sidebar-tabs" id="sidebarTabs">
+                <!-- 普通用户 -->
+                <button class="tab-item active tab-role-user" data-tab="feedback" hidden>
+                    <span class="tab-icon">&#128172;</span>
+                    <span>反馈</span>
+                </button>
+                <!-- 管理员 -->
+                <button class="tab-item active tab-role-admin" data-tab="admin-feedback" hidden>
+                    <span class="tab-icon">&#128203;</span>
+                    <span>反馈处理</span>
+                </button>
+            </nav>
+        </div>
+        <div class="sidebar-bottom">
+            <button class="tab-item user-tab" data-tab="user" id="userTabBtn">
+                <span class="tab-icon">&#128100;</span>
+                <span id="userTabName">用户</span>
+            </button>
+            <button class="tab-item logout-tab" id="logoutBtn">
+                <span class="tab-icon">&#128682;</span>
+                <span>退出登录</span>
+            </button>
+        </div>
+    </aside>
+
+    <main class="main">
+        <!-- 普通用户：反馈会话 -->
+        <section class="view" id="view-feedback">
+            <!-- 列表视图 -->
+            <div class="subview" id="feedback-list-view">
+                <header class="view-header">
+                    <h2>我的反馈</h2>
+                    <button class="btn btn-primary" id="newFeedbackBtn">新增反馈</button>
+                </header>
+                <div class="view-body">
+                    <div class="feedback-list" id="feedbackList">
+                        <div class="empty-placeholder">加载中...</div>
+                    </div>
+                    <div class="pager" id="feedbackPager"></div>
+                </div>
+            </div>
+
+            <!-- 会话详情视图 -->
+            <div class="subview" id="feedback-detail-view" hidden>
+                <header class="view-header">
+                    <div class="header-left">
+                        <button class="btn btn-ghost" id="feedbackBackBtn">&larr; 返回</button>
+                        <h2 id="feedbackDetailTitle">反馈详情</h2>
+                        <span class="status-chip" id="feedbackDetailStatus"></span>
+                    </div>
+                </header>
+                <div class="view-body chat-body">
+                    <div class="chat-thread" id="feedbackThread"></div>
+                    <form class="chat-composer" id="feedbackComposer">
+                        <textarea id="feedbackReplyInput" maxlength="5000" rows="3"
+                                  placeholder="继续补充信息..."></textarea>
+                        <div class="chat-composer-foot">
+                            <span class="chat-hint" id="feedbackReplyHint"></span>
+                            <button type="submit" class="btn btn-primary" id="feedbackReplyBtn">发送</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- 管理员：反馈处理 -->
+        <section class="view" id="view-admin-feedback">
+            <!-- 列表视图 -->
+            <div class="subview" id="admin-feedback-list-view">
+                <header class="view-header">
+                    <h2>反馈处理</h2>
+                    <div class="header-right">
+                        <label class="select-inline">
+                            状态：
+                            <select id="adminStatusFilter">
+                                <option value="">全部</option>
+                                <option value="open">待处理</option>
+                                <option value="processing">处理中</option>
+                                <option value="resolved">已解决</option>
+                                <option value="closed">已关闭</option>
+                            </select>
+                        </label>
+                    </div>
+                </header>
+                <div class="view-body">
+                    <div class="feedback-list" id="adminFeedbackList">
+                        <div class="empty-placeholder">加载中...</div>
+                    </div>
+                    <div class="pager" id="adminFeedbackPager"></div>
+                </div>
+            </div>
+
+            <!-- 会话详情视图 -->
+            <div class="subview" id="admin-feedback-detail-view" hidden>
+                <header class="view-header">
+                    <div class="header-left">
+                        <button class="btn btn-ghost" id="adminFeedbackBackBtn">&larr; 返回</button>
+                        <h2 id="adminFeedbackDetailTitle">反馈详情</h2>
+                        <span class="status-chip" id="adminFeedbackDetailStatus"></span>
+                    </div>
+                    <div class="header-right">
+                        <label class="select-inline">
+                            状态：
+                            <select id="adminStatusSelect">
+                                <option value="open">待处理</option>
+                                <option value="processing">处理中</option>
+                                <option value="resolved">已解决</option>
+                                <option value="closed">已关闭</option>
+                            </select>
+                        </label>
+                    </div>
+                </header>
+                <div class="admin-detail-meta" id="adminDetailMeta"></div>
+                <div class="view-body chat-body">
+                    <div class="chat-thread" id="adminFeedbackThread"></div>
+                    <form class="chat-composer" id="adminFeedbackComposer">
+                        <textarea id="adminReplyInput" maxlength="5000" rows="3"
+                                  placeholder="以管理员身份回复..."></textarea>
+                        <div class="chat-composer-foot">
+                            <span class="chat-hint" id="adminReplyHint"></span>
+                            <button type="submit" class="btn btn-primary" id="adminReplyBtn">发送回复</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- 用户信息 -->
+        <section class="view" id="view-user">
+            <header class="view-header">
+                <h2>用户信息</h2>
+            </header>
+            <div class="view-body">
+                <div class="info-card">
+                    <div class="info-row">
+                        <span class="info-label">用户名</span>
+                        <span class="info-value" id="profileName">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">用户 ID</span>
+                        <span class="info-value" id="profileUserId">-</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- 新增反馈弹窗 -->
+<div class="modal-mask" id="feedbackModal" hidden>
+    <div class="modal">
+        <header class="modal-header">
+            <span>新增反馈</span>
+            <button class="modal-close" id="feedbackModalClose">&times;</button>
+        </header>
+        <div class="modal-body">
+            <textarea id="feedbackContent" maxlength="5000" rows="10"
+                      placeholder="请详细描述你的问题或建议..."></textarea>
+            <div class="modal-hint" id="feedbackHint"></div>
+        </div>
+        <footer class="modal-footer">
+            <button class="btn btn-ghost" id="feedbackCancelBtn">取消</button>
+            <button class="btn btn-primary" id="feedbackSubmitBtn">提交</button>
+        </footer>
+    </div>
+</div>
+
+<script src="js/utils.js?v=dev"></script>
+<script src="js/api.js?v=dev"></script>
+<script src="js/app.js?v=dev"></script>
+</body>
+</html>

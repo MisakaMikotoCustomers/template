@@ -5,7 +5,7 @@
 #      - [apiserver].host       : 后端主机（留空表示同域）
 #      - [apiserver].path_prefix: 后端 API 前缀（默认 /api）
 #      - [rum].*                : 腾讯云 RUM（Aegis）前端监控配置
-#          enabled, id, uin, host_url, spa, report_api_speed,
+#          enabled, id, uin, spa, report_api_speed,
 #          report_asset_speed, env, version, sample_rate, src
 #        · [rum].version 留空时，退化使用环境变量 BUILD_VERSION
 #          （由构建镜像时写入，一般是 8 位 git commit），
@@ -76,7 +76,6 @@ APISERVER_PATH_PREFIX="/api"
 RUM_ENABLED="false"
 RUM_ID='""'
 RUM_UIN='""'
-RUM_HOST_URL='"https://rumt-zh.com"'
 RUM_SPA="true"
 RUM_REPORT_API_SPEED="true"
 RUM_REPORT_ASSET_SPEED="true"
@@ -99,7 +98,6 @@ if [ -f "$CONFIG_FILE" ]; then
     RUM_ENABLED=$(raw_or_default "$(get_toml_raw rum enabled "$CONFIG_FILE")" "$RUM_ENABLED")
     RUM_ID=$(raw_or_default "$(get_toml_raw rum id "$CONFIG_FILE")" "$RUM_ID")
     RUM_UIN=$(raw_or_default "$(get_toml_raw rum uin "$CONFIG_FILE")" "$RUM_UIN")
-    RUM_HOST_URL=$(raw_or_default "$(get_toml_raw rum host_url "$CONFIG_FILE")" "$RUM_HOST_URL")
     RUM_SPA=$(raw_or_default "$(get_toml_raw rum spa "$CONFIG_FILE")" "$RUM_SPA")
     RUM_REPORT_API_SPEED=$(raw_or_default "$(get_toml_raw rum report_api_speed "$CONFIG_FILE")" "$RUM_REPORT_API_SPEED")
     RUM_REPORT_ASSET_SPEED=$(raw_or_default "$(get_toml_raw rum report_asset_speed "$CONFIG_FILE")" "$RUM_REPORT_ASSET_SPEED")
@@ -139,7 +137,6 @@ cat > /app/config.json <<ENDJSON
     "enabled": ${RUM_ENABLED},
     "id": ${RUM_ID},
     "uin": ${RUM_UIN},
-    "host_url": ${RUM_HOST_URL},
     "spa": ${RUM_SPA},
     "report_api_speed": ${RUM_REPORT_API_SPEED},
     "report_asset_speed": ${RUM_REPORT_ASSET_SPEED},

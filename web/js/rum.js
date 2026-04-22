@@ -5,7 +5,7 @@
  * 默认关闭，不启用时完全不加载 SDK。
  *
  * 参数对齐腾讯云 RUM 官方接入代码：
- *   new Aegis({ id, uin, hostUrl, spa, reportApiSpeed, reportAssetSpeed, ... })
+ *   new Aegis({ id, uin, spa, reportApiSpeed, reportAssetSpeed, ... })
  */
 
 function initRUM(rumConfig) {
@@ -31,10 +31,11 @@ function initRUM(rumConfig) {
                 console.warn('Aegis SDK loaded but global Aegis constructor not found.');
                 return;
             }
-            // 构造 Aegis 选项：按官方命名映射（snake_case -> camelCase）
+            // 构造 Aegis 选项：按官方命名映射（snake_case -> camelCase）。
+            // hostUrl 是 Aegis SDK 的固定上报端点，SDK 自己内置默认值（腾讯云大陆站
+            // 为 https://rumt-zh.com），不是域名白名单，这里不从后端下发，直接用 SDK 默认。
             const options = {
                 id: rumConfig.id,
-                hostUrl: rumConfig.host_url || 'https://rumt-zh.com',
                 spa: rumConfig.spa !== false,
                 reportApiSpeed: rumConfig.report_api_speed !== false,
                 reportAssetSpeed: rumConfig.report_asset_speed !== false,

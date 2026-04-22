@@ -36,7 +36,6 @@ path_prefix = "/api"
 # 字段与官方 Aegis 构造参数对齐（snake_case <-> camelCase）：
 #   id                -> id               (腾讯云 RUM 项目 aegis id)
 #   uin               -> uin              (可选，用户标识)
-#   host_url          -> hostUrl          (上报地址)
 #   spa               -> spa              (单页应用路由监听)
 #   report_api_speed  -> reportApiSpeed
 #   report_asset_speed-> reportAssetSpeed
@@ -44,12 +43,13 @@ path_prefix = "/api"
 #   version           -> version          (发布版本，留空退化为 BUILD_VERSION)
 #   sample_rate       -> sampleRate       (0-1 浮点采样率)
 #   src                                    (Aegis SDK CDN 地址)
+# 注：hostUrl（Aegis 上报端点）由 SDK 内置默认值处理，不在这里下发；
+#     域名白名单请在腾讯云 RUM 项目管理页面配置。
 # ============================================================
 [rum]
 enabled = false
 id = ""
 uin = ""
-host_url = "https://rumt-zh.com"
 spa = true
 report_api_speed = true
 report_asset_speed = true

@@ -228,7 +228,9 @@ class AsyncCLSHandler(logging.Handler):
             from tencentcloud.log.logclient import LogClient
             from tencentcloud.log.cls_pb2 import LogGroupList
         except ImportError as e:
-            raise RuntimeError('tencentcloud-cls-sdk-python not installed') from e
+            raise RuntimeError(
+                'tencentcloud-cls-sdk-python or a required module is missing: %s' % e
+            ) from e
 
         endpoint = f'https://{self.region}.cls.tencentcs.com'
         client = LogClient(

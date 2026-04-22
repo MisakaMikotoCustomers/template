@@ -32,7 +32,8 @@ RUN pip install --retries 10 "tomli>=2.0; python_version < '3.11'"
 # （实测报错：RUN pip install tencentcloud-cls-sdk-python → lz4 编译 gcc: not found）。
 # 方案：先装兼容的新版 lz4（API 不变），然后 --no-deps 跳过过期 pin。
 # python-snappy 只在消费端用，上报路径不需要，故不安装。
-RUN pip install --retries 10 "six" "protobuf>=3.20,<4" "python-dateutil" "lz4"
+# --no-deps 不会装 SDK 自带的 requests，logclient 导入会失败（ModuleNotFoundError: requests）。
+RUN pip install --retries 10 "six" "protobuf>=3.20,<4" "python-dateutil" "lz4" "requests"
 RUN pip install --retries 10 --no-deps "tencentcloud-cls-sdk-python"
 
 COPY . /app

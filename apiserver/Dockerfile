@@ -24,6 +24,9 @@ RUN pip install --retries 10 "aiomysql>=0.2.0"
 RUN pip install --retries 10 "httpx>=0.27"
 RUN pip install --retries 10 "pydantic>=2.5"
 RUN pip install --retries 10 "tomli>=2.0; python_version < '3.11'"
+# 腾讯云 CLS 日志上报 SDK（注意：不是 tencentcloud-sdk-python-cls，那是管理 API）
+# cls.enabled=false 时不会 import；为避免 ai-task 注入 [log] 段后重启报错先装上
+RUN pip install --retries 10 "tencentcloud-cls-sdk-python"
 
 COPY . /app
 

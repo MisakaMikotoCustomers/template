@@ -80,11 +80,43 @@ class AuthConfig:
 
 
 @dataclass
+class ClsConfig:
+    """
+    腾讯云 CLS 日志上报配置。
+
+    默认 `enabled=False` —— 保持 stdout-only，本地 dev / 未接 CLS 的环境零依赖。
+    部署到带 CLS 的环境时由 ai-task 在 deploy TOML 里自动注入 `[log]` 段（启动
+    后会映射到这里），运维侧无需手工改模板。
+    """
+    enabled: bool = False
+    region: str = ""
+    secret_id: str = ""
+    secret_key: str = ""
+    topic_id: str = ""                   # apiserver 自身日志 topic（ai-task [log] 段注入）
+    service: str = "apiserver"           # 写入 CLS Contents.service 字段
+    env: str = "default"                 # prod / test / default
+    fallback_path: str = "/tmp/cls_fallback.jsonl"
+    fallback_max_mb: int = 200
+
+
+@dataclass
+class SqlInterceptorConfig:
+    """SQLAlchemy SQL 耗时拦截器配置。默认关闭。"""
+    enabled: bool = False
+    slow_threshold_ms: int = 200
+    max_sql_bytes: int = 2048
+    log_params: bool = True
+    max_params_bytes: int = 1024
+
+
+@dataclass
 class AppConfig:
     """应用总配置"""
     server: ServerConfig = field(default_factory=ServerConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    cls: ClsConfig = field(default_factory=ClsConfig)
+    sql_interceptor: SqlInterceptorConfig = field(default_factory=SqlInterceptorConfig)
 
     @classmethod
     def from_toml(cls, path: str) -> "AppConfig":
@@ -102,10 +134,15 @@ class AppConfig:
             for item in raw_accounts
             if isinstance(item, dict)
         ]
+        # ai-task 注入的官方 log 段是 `[log]`，同时兼容直接写 `[cls]` 的部署。
+        cls_raw = dict(data.get("cls") or data.get("log") or {})
+        sql_raw = dict(data.get("sql_interceptor") or {})
         return cls(
             server=ServerConfig(**data.get("server", {})),
             database=DatabaseConfig(**data.get("database", {})),
             auth=AuthConfig(**auth_raw, special_accounts=accounts),
+            cls=ClsConfig(**cls_raw),
+            sql_interceptor=SqlInterceptorConfig(**sql_raw),
         )
 
     @classmethod

@@ -14,6 +14,8 @@ FastAPI + async SQLAlchemy + httpx 栈，做如下替换：
 - 基于 OpenTelemetry + OTLP 协议将 trace 上报到腾讯云 APM
 - enabled=False 时完全跳过，零开销；SDK 未就绪或初始化失败时降级 warning
 - 实例标识按 HOST_HOSTNAME / CONTAINER_NAME 环境变量组合，避免 APM 控制台 "unknown"
+- 接入约定与腾讯云「通过 OpenTelemetry-Python 接入」对齐：``https://`` + gRPC 走 TLS；
+  默认 ``:4320`` 接入点按 OTLP/HTTP 使用（``protocol=http``）。
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import logging
 import os
 import socket
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +56,36 @@ def _resolve_host_identity() -> tuple[str, str]:
 
     instance_id = f'{host_name}:{os.getpid()}'
     return host_name, instance_id
+
+
+def _coerce_otlp_endpoint_protocol(endpoint: str, protocol: str) -> tuple[str, str]:
+    """规范化 OTLP 接入点与协议组合（与腾讯云 OpenTelemetry-Python 接入说明一致）。"""
+    ep = (endpoint or '').strip()
+    proto = (protocol or 'http').strip().lower()
+    if proto not in ('grpc', 'http'):
+        proto = 'http'
+
+    if ep.startswith('https://') or ep.startswith('http://'):
+        parsed = urlparse(ep)
+        if proto == 'grpc':
+            if ':4320' in (parsed.netloc or '') or parsed.port == 4320:
+                logger.warning(
+                    'APM：接入点含 :4320 且 protocol=grpc。该端口常见为 OTLP/HTTP；'
+                    '若导出失败请将 [apm].protocol 设为 http，或与控制台「接入应用」核对。',
+                )
+            return proto, ep
+        path = (parsed.path or '').strip()
+        if path in ('', '/'):
+            ep = urlunparse(parsed._replace(path='/v1/traces'))
+            logger.info('APM OTLP/HTTP 接入点已补全路径: %s', ep)
+        return proto, ep
+
+    if proto == 'http':
+        logger.warning(
+            'APM protocol=http 但 endpoint 无 http(s) scheme（%s）；导出可能失败，请检查配置。',
+            ep[:80],
+        )
+    return proto, ep
 
 
 def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
@@ -88,13 +121,18 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         logger.warning('OpenTelemetry SDK 未就绪，跳过 APM 初始化: %s', e)
         return False
 
+    eff_proto, eff_endpoint = _coerce_otlp_endpoint_protocol(
+        getattr(apm_config, 'endpoint', '') or '',
+        getattr(apm_config, 'protocol', 'http') or 'http',
+    )
+
     try:
-        if apm_config.protocol == 'http':
+        if eff_proto == 'http':
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         else:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     except ImportError as e:
-        logger.warning('OTLP exporter 未就绪（protocol=%s），跳过 APM 初始化: %s', apm_config.protocol, e)
+        logger.warning('OTLP exporter 未就绪（protocol=%s），跳过 APM 初始化: %s', eff_proto, e)
         return False
 
     try:
@@ -117,12 +155,13 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         # "metadata was invalid: ('Authentication', ...)" —— span 根本出不了本机。
         # 腾讯云 APM 端对 key 大小写不敏感，小写就行。
         exporter_kwargs = {
-            'endpoint': apm_config.endpoint,
+            'endpoint': eff_endpoint,
             'headers': (('authentication', apm_config.token),),
         }
-        if apm_config.protocol == 'grpc':
-            # 腾讯云 APM gRPC 接入点不需要 TLS（明文 token 鉴权）
-            exporter_kwargs['insecure'] = True
+        if eff_proto == 'grpc':
+            # https:// + gRPC 走 TLS（与腾讯云文档一致）；裸 host:port 为明文 gRPC
+            if not eff_endpoint.startswith('https://'):
+                exporter_kwargs['insecure'] = True
         exporter = OTLPSpanExporter(**exporter_kwargs)
         provider.add_span_processor(BatchSpanProcessor(span_exporter=exporter))
 
@@ -181,6 +220,6 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
     logger.info(
         'APM initialized: service=%s instance=%s host=%s env=%s endpoint=%s protocol=%s sampler_ratio=%.2f',
         apm_config.service_name, instance_id, host_name, apm_config.env,
-        apm_config.endpoint, apm_config.protocol, apm_config.sampler_ratio,
+        eff_endpoint, eff_proto, apm_config.sampler_ratio,
     )
     return True

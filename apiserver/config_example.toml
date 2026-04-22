@@ -104,7 +104,7 @@ env = "prod"
 # 采样率 0~1，高 QPS 服务可降至 0.1~0.3
 sampler_ratio = 1.0
 # 上报协议：grpc / http
-protocol = "grpc"
+protocol = "http"
 # 自动埋点开关（FastAPI + SQLAlchemy + httpx）
 instrument_fastapi = true
 instrument_sqlalchemy = true

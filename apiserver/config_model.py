@@ -135,7 +135,7 @@ class ApmConfig:
     service_name: str = "template-apiserver"
     env: str = "prod"
     sampler_ratio: float = 1.0
-    protocol: str = "grpc"              # grpc / http
+    protocol: str = "http"              # grpc：裸 host:4317；http：https://…:4320 等 OTLP/HTTP
     instrument_fastapi: bool = True
     instrument_sqlalchemy: bool = True
     instrument_httpx: bool = True

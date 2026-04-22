@@ -123,14 +123,14 @@ class ApmConfig:
 
     基于 OpenTelemetry + OTLP 协议接入腾讯云 APM。
     - enabled=False 时完全跳过 APM 初始化，零开销零行为影响
-    - endpoint 为腾讯云 APM 接入点，形如 "ap-guangzhou.apm.tencentcs.com:4317"（gRPC）
+    - endpoint 为腾讯云 APM 接入点，形如 "https://ap-shanghai.apm.tencentcs.com:4320"
     - token 为 APM 实例的 Token（由 ai_task 平台 generate_official_toml 自动下发）
     - service_name 用于在 APM 控制台区分不同服务
     - sampler_ratio 控制采样率（0~1），高 QPS 服务可降至 0.1~0.3
     - template 使用 FastAPI + httpx，埋点开关对应 fastapi / httpx
     """
     enabled: bool = False
-    endpoint: str = "ap-guangzhou.apm.tencentcs.com:4317"
+    endpoint: str = "https://ap-shanghai.apm.tencentcs.com:4320"
     token: str = ""
     service_name: str = "template-apiserver"
     env: str = "prod"

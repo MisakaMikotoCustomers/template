@@ -93,8 +93,8 @@ max_params_bytes = 1024
 # 腾讯云 APM（应用性能监控）。通常由 ai_task 平台在部署时通过官方配置下发，
 # 无需手动填写；本段提供字段文档供参考。enabled=false 时完全零开销。
 enabled = false
-# OTLP 接入点（gRPC 4317 / HTTP 4318）。形如 {region}.apm.tencentcs.com:4317
-endpoint = "ap-guangzhou.apm.tencentcs.com:4317"
+# OTLP 接入点（HTTPs 4320）
+endpoint = "https://ap-shanghai.apm.tencentcs.com:4320"
 # APM 实例 Token（控制台 -> 应用列表 -> 接入应用 获取）
 token = ""
 # 服务名：展示在腾讯云 APM "应用列表"

@@ -27,7 +27,9 @@ path_prefix = "/api"
 # [rum] 腾讯云 RUM（Aegis）前端监控配置
 # ------------------------------------------------------------
 # enabled=false 时完全不加载 Aegis SDK；
-# 正式接入请先在「admin 后台 → 资源管理」配置 frontend_monitor 资源，
+# 正式接入请先在「admin 后台 → 资源管理」配置 frontend_monitor 资源
+#（Secret、可选 Region；若控制台使用「业务系统」多实例，请在同表单填写
+# RUM 实例 ID，对应腾讯云 CreateProject 的 InstanceID）。
 # 然后在「应用创建」时默认会按 (应用, 环境) 各建一个独立的 RUM 项目，
 # 并把 aegis_id 写回到本配置的 [rum].id。
 # ------------------------------------------------------------

@@ -112,15 +112,30 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         sampler = TraceIdRatioBased(rate=apm_config.sampler_ratio)
         provider = TracerProvider(resource=resource, sampler=sampler)
 
+        # 腾讯云 APM OTLP 鉴权 header：按官方 Python 示例 key 为 "Authentication"
+        # （大写 A）。虽然 gRPC metadata 语义上不区分大小写，部分老版本腾讯侧网关
+        # 会严格 case-match，改为大写 A 更稳妥。
         exporter_kwargs = {
             'endpoint': apm_config.endpoint,
-            'headers': (('authentication', apm_config.token),),
+            'headers': (('Authentication', apm_config.token),),
         }
         if apm_config.protocol == 'grpc':
             # 腾讯云 APM gRPC 接入点不需要 TLS（明文 token 鉴权）
             exporter_kwargs['insecure'] = True
         exporter = OTLPSpanExporter(**exporter_kwargs)
         provider.add_span_processor(BatchSpanProcessor(span_exporter=exporter))
+
+        # 排障开关：设 OTEL_DEBUG_SPAN_CONSOLE=1 时把 span 同步打到 stdout（与 OTLP 并行），
+        # 可直接 `docker logs` 确认实际发送的 attribute（尤其 http.method / http.target 等旧
+        # semconv 有没有生效）。生产关闭。
+        if os.environ.get('OTEL_DEBUG_SPAN_CONSOLE', '').strip() in ('1', 'true', 'yes'):
+            try:
+                from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+                provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+                logger.info('APM debug: ConsoleSpanExporter enabled (OTEL_DEBUG_SPAN_CONSOLE=1)')
+            except Exception as e:
+                logger.warning('APM debug: ConsoleSpanExporter 挂载失败: %s', e)
+
         trace.set_tracer_provider(provider)
     except Exception as e:
         logger.exception('APM TracerProvider 初始化失败: %s', e)
@@ -138,6 +153,8 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
             FastAPIInstrumentor.instrument_app(app)
+            logger.info('APM FastAPIInstrumentor attached (semconv_opt_in=%s)',
+                        os.environ.get('OTEL_SEMCONV_STABILITY_OPT_IN', ''))
         except Exception as e:
             logger.warning('FastAPIInstrumentor 挂载失败，跳过: %s', e)
 
@@ -147,6 +164,7 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
             from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
             sync_engine = getattr(engine, 'sync_engine', None) or engine
             SQLAlchemyInstrumentor().instrument(engine=sync_engine)
+            logger.info('APM SQLAlchemyInstrumentor attached')
         except Exception as e:
             logger.warning('SQLAlchemyInstrumentor 挂载失败，跳过: %s', e)
 
@@ -155,6 +173,7 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         try:
             from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
             HTTPXClientInstrumentor().instrument()
+            logger.info('APM HTTPXClientInstrumentor attached')
         except Exception as e:
             logger.warning('HTTPXClientInstrumentor 挂载失败，跳过: %s', e)
 

@@ -25,8 +25,15 @@ RUN pip install --retries 10 "httpx>=0.27"
 RUN pip install --retries 10 "pydantic>=2.5"
 RUN pip install --retries 10 "tomli>=2.0; python_version < '3.11'"
 # 腾讯云 CLS 日志上报 SDK（注意：不是 tencentcloud-sdk-python-cls，那是管理 API）
-# cls.enabled=false 时不会 import；为避免 ai-task 注入 [log] 段后重启报错先装上
-RUN pip install --retries 10 "tencentcloud-cls-sdk-python"
+# cls.enabled=false 时不会 import；为避免 ai-task 注入 [log] 段后重启报错先装上。
+#
+# tencentcloud-cls-sdk-python 固定依赖 lz4<=3.1.2 / python-snappy<=0.7.0，
+# 这些老版本在 python:3.11-slim 上没有 wheel，会触发源码编译而 slim 镜像没 gcc
+# （实测报错：RUN pip install tencentcloud-cls-sdk-python → lz4 编译 gcc: not found）。
+# 方案：先装兼容的新版 lz4（API 不变），然后 --no-deps 跳过过期 pin。
+# python-snappy 只在消费端用，上报路径不需要，故不安装。
+RUN pip install --retries 10 "six" "protobuf>=3.20,<4" "python-dateutil" "lz4"
+RUN pip install --retries 10 --no-deps "tencentcloud-cls-sdk-python"
 
 COPY . /app
 

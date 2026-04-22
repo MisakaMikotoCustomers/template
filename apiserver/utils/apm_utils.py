@@ -128,6 +128,13 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
 
     # FastAPI 自动埋点
     if apm_config.instrument_fastapi and app is not None:
+        # 腾讯云 APM 的「应用 / 接口分析」聚合仍然按旧 HTTP semconv（http.method / http.target /
+        # http.status_code）抽字段。opentelemetry-instrumentation-fastapi >= 0.46b0 默认只发新
+        # 的稳定语义（http.request.method / url.path / http.response.status_code），导致链路
+        # 追踪有数据但接口分析是空的。
+        # 解决：opt-in 到 dup 模式，同时吐两套 attribute，新旧消费者兼容。该 env 必须在
+        # 导入 FastAPIInstrumentor 之前设置（相关模块在 import 时读一次）。
+        os.environ.setdefault('OTEL_SEMCONV_STABILITY_OPT_IN', 'http/dup')
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
             FastAPIInstrumentor.instrument_app(app)

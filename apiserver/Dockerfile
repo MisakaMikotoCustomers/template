@@ -6,7 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_DEFAULT_TIMEOUT=120 \
-    APP_CONFIG_PATH=/config/config.toml
+    APP_CONFIG_PATH=/config/config.toml \
+    OTEL_SEMCONV_STABILITY_OPT_IN=http/dup
 
 # 使用阿里云 PyPI 镜像，加速国内构建
 RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \

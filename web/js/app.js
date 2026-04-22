@@ -376,6 +376,10 @@
 
     async function applyBranding() {
         await initAPIConfig();
+        // 根据下发的 RUM 配置按需初始化 Aegis；未启用或缺失时为 no-op。
+        if (typeof initRUM === 'function') {
+            initRUM(window.__RUM_CONFIG__);
+        }
         const name = getAppName();
         $('brandName').textContent = name;
         document.title = name;

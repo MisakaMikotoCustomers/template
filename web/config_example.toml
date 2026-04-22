@@ -22,3 +22,39 @@ name = "Template"
 host = ""
 # 后端 API 路径前缀（需和 apiserver 的 server.url_prefix + "/api" 对齐）
 path_prefix = "/api"
+
+# ============================================================
+# [rum] 腾讯云 RUM（Aegis）前端监控配置
+# ------------------------------------------------------------
+# enabled=false 时完全不加载 Aegis SDK；
+# 正式接入请先在「admin 后台 → 资源管理」配置 frontend_monitor 资源
+#（Secret、可选 Region；若控制台使用「业务系统」多实例，请在同表单填写
+# RUM 实例 ID，对应腾讯云 CreateProject 的 InstanceID）。
+# 然后在「应用创建」时默认会按 (应用, 环境) 各建一个独立的 RUM 项目，
+# 并把 aegis_id 写回到本配置的 [rum].id。
+# ------------------------------------------------------------
+# 字段与官方 Aegis 构造参数对齐（snake_case <-> camelCase）：
+#   id                -> id               (腾讯云 RUM 项目 aegis id)
+#   uin               -> uin              (可选，用户标识)
+#   spa               -> spa              (单页应用路由监听)
+#   report_api_speed  -> reportApiSpeed
+#   report_asset_speed-> reportAssetSpeed
+#   env               -> env              (test/prod 等环境标签)
+#   version           -> version          (发布版本，留空退化为 BUILD_VERSION)
+#   sample_rate       -> sampleRate       (0-1 浮点采样率)
+#   src                                    (Aegis SDK CDN 地址)
+# 注：hostUrl（Aegis 上报端点）由 SDK 内置默认值处理，不在这里下发；
+#     域名白名单请在腾讯云 RUM 项目管理页面配置。
+# ============================================================
+[rum]
+enabled = false
+id = ""
+uin = ""
+spa = true
+report_api_speed = true
+report_asset_speed = true
+env = ""
+# 留空时自动使用镜像构建时注入的 BUILD_VERSION（8 位 git commit）。
+version = ""
+sample_rate = 1.0
+src = "https://tam.cdn-go.cn/aegis-sdk/latest/aegis.min.js"

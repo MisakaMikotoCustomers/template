@@ -14,12 +14,14 @@ FastAPI + async SQLAlchemy + httpx 栈，做如下替换：
 - 基于 OpenTelemetry + OTLP 协议将 trace 上报到腾讯云 APM
 - enabled=False 时完全跳过，零开销；SDK 未就绪或初始化失败时降级 warning
 - 实例标识按 HOST_HOSTNAME / CONTAINER_NAME 环境变量组合，避免 APM 控制台 "unknown"
-- 接入约定与腾讯云「通过 OpenTelemetry-Python 接入」对齐：
-  * OTLP/gRPC：``<region>.apm.tencentcs.com:4317`` 明文或 ``https://…:4317`` TLS
-  * OTLP/HTTP：``https://<region>.apm.tencentcs.com/adapt/trace/v1/traces`` (443 + 固定路径)
-  历史上使用的 ``:4320`` 端点经 exporter 补全后会落到不存在的 ``:4320/v1/traces``，
-  服务端直接 `RemoteDisconnected`。_coerce_otlp_endpoint_protocol 会把
-  ``*.apm.tencentcs.com`` 且空路径的老配置自动补成 ``/adapt/trace/v1/traces`` 作兜底。
+- 接入约定与腾讯云「接入应用」→「外网上报」一致：
+  * ``https://<region>.apm.tencentcs.com:4320`` —— TLS 上的 OTLP/gRPC（控制台 HTTPS 接入点）
+  * ``http://<region>.apm.tencentcs.com:4319``  —— 明文 OTLP/gRPC（控制台 HTTP 接入点）
+  两个接入点都是 gRPC，必须配 ``[apm].protocol = "grpc"``；若配成 "http"，
+  OTLPSpanExporter(proto/http) 会把请求打到 gRPC 端口，服务端直接 `RemoteDisconnected`
+  断开，span 永远上报不出去。``_coerce_otlp_endpoint_protocol`` 针对历史误配
+  （endpoint 为 ``*.apm.tencentcs.com`` 但 protocol="http"）会自动纠正到 grpc，
+  并记一条 warning。
 """
 
 from __future__ import annotations
@@ -117,12 +119,12 @@ def _resolve_host_identity() -> tuple[str, str]:
 
 
 def _coerce_otlp_endpoint_protocol(endpoint: str, protocol: str) -> tuple[str, str]:
-    """规范化 OTLP 接入点与协议组合（与腾讯云 OpenTelemetry-Python 接入说明一致）。
+    """规范化 OTLP 接入点与协议组合。
 
-    腾讯云 APM 官方 OTLP/HTTP 路径是 ``/adapt/trace/v1/traces``（不是标准 ``/v1/traces``）。
-    因此对 ``*.apm.tencentcs.com`` 做专属补全；其它域名（自建 OpenTelemetry Collector 等）
-    走 OTLP 标准 ``/v1/traces`` 补全。这样既修复当前部署（老 ``:4320`` 空路径配置会被补
-    成正确路径），又不影响自建 collector 的使用。
+    - 腾讯云 APM 外网 ``:4319/:4320`` 都是 gRPC（``https://`` 仅代表 TLS），必须配 protocol=grpc。
+      若用户对 ``*.apm.tencentcs.com`` 配了 protocol=http，本函数会 **自动纠正为 grpc**
+      并记 warning（保留 http 的唯一结局就是 `RemoteDisconnected`，自动纠正反而能立刻恢复上报）。
+    - 自建 OpenTelemetry Collector 通常走 OTLP/HTTP，空路径的会补全到 ``/v1/traces``。
     """
     ep = (endpoint or '').strip()
     proto = (protocol or 'http').strip().lower()
@@ -133,17 +135,18 @@ def _coerce_otlp_endpoint_protocol(endpoint: str, protocol: str) -> tuple[str, s
         parsed = urlparse(ep)
         host = (parsed.hostname or '').lower()
         is_tencent_apm = host.endswith('.apm.tencentcs.com')
+        if is_tencent_apm and proto == 'http':
+            logger.warning(
+                'APM：endpoint=%s 指向腾讯云 APM（:4319/:4320 均为 OTLP/gRPC），'
+                'protocol 配成 "http" 会被服务端 RemoteDisconnected。已自动切换到 grpc；'
+                '请把 [apm].protocol 改成 "grpc" 以消除此警告。', ep,
+            )
+            proto = 'grpc'
         if proto == 'grpc':
-            if ':4320' in (parsed.netloc or '') or parsed.port == 4320:
-                logger.warning(
-                    'APM：接入点含 :4320 且 protocol=grpc。腾讯云 APM 的 OTLP/gRPC 端口是 :4317；'
-                    '若导出失败请改用 <region>.apm.tencentcs.com:4317，或将 [apm].protocol 设为 http。',
-                )
             return proto, ep
         path = (parsed.path or '').strip()
         if path in ('', '/'):
-            default_path = '/adapt/trace/v1/traces' if is_tencent_apm else '/v1/traces'
-            ep = urlunparse(parsed._replace(path=default_path))
+            ep = urlunparse(parsed._replace(path='/v1/traces'))
             logger.info('APM OTLP/HTTP 接入点已补全路径: %s', ep)
         return proto, ep
 

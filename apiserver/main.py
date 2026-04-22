@@ -88,6 +88,11 @@ def create_app(config: AppConfig) -> FastAPI:
             )
         # 特殊账号 upsert：依赖 user 表已建好，必须在 init_database 之后
         await sync_special_accounts(config.auth.special_accounts)
+        # 腾讯云 APM 接入（OpenTelemetry + OTLP）
+        # enabled=false 时 init_apm 立即返回，零开销；内部已做 import/异常降级
+        if getattr(config, 'apm', None) and config.apm.enabled:
+            from utils.apm_utils import init_apm
+            init_apm(apm_config=config.apm, app=app, engine=get_engine())
         yield
         await dispose_engine()
         logger.info('Database engine disposed')

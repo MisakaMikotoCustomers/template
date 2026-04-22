@@ -10,6 +10,7 @@
 import os
 from dataclasses import dataclass, field
 from typing import List
+from urllib.parse import quote_plus
 
 try:
     import tomllib  # Python 3.11+
@@ -50,11 +51,18 @@ class DatabaseConfig:
     echo: bool = False
 
     def async_url(self) -> str:
-        """SQLAlchemy 2.0 + aiomysql 的异步连接串。"""
+        """SQLAlchemy 2.0 + aiomysql 的异步连接串。
+
+        username / password 必须 URL 编码：生产里阿里云 RDS 发的随机密码含 `@`
+        / `#` / `/` 等保留字符时，未编码会被 SQLAlchemy 按 userinfo 分界解析错位
+        （例如 password `lLx@iBxIMcs5brbD` → host 被识别成
+        `iBxIMcs5brbD@rm-xxx.mysql.rds.aliyuncs.com`，aiomysql 直接抛
+        `gaierror: Name or service not known`）。
+        """
         if self.type != "mysql":
             raise ValueError(f"暂不支持的数据库类型: {self.type}")
         return (
-            f"mysql+aiomysql://{self.username}:{self.password}"
+            f"mysql+aiomysql://{quote_plus(self.username)}:{quote_plus(self.password)}"
             f"@{self.url}:{self.port}/{self.database}?charset=utf8mb4"
         )
 

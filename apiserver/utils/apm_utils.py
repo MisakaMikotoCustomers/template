@@ -29,6 +29,60 @@ from urllib.parse import urlparse, urlunparse
 logger = logging.getLogger(__name__)
 
 
+class _LoggingSpanExporterWrapper:
+    """把 OTLP exporter 的每次导出结果显式打日志，便于排障。
+
+    OTel 内部 BatchSpanProcessor 只在失败时用 `opentelemetry.sdk._shared_internal`
+    logger 打 ERROR，成功不吭声。真排障时我们需要"每批次导出了几条、成功还是失败、
+    哪条返回码"的事实。包一层即可。
+    """
+
+    def __init__(self, inner, label: str = 'OTLP'):
+        self._inner = inner
+        self._label = label
+        self._ok_batches = 0
+        self._ok_spans = 0
+        self._fail_batches = 0
+
+    def export(self, spans):
+        from opentelemetry.sdk.trace.export import SpanExportResult
+        n = len(spans)
+        sample_name = spans[0].name if spans else ''
+        try:
+            result = self._inner.export(spans)
+        except Exception as exc:
+            self._fail_batches += 1
+            logger.exception(
+                'APM %s export raised: spans=%d first=%r fail_batches=%d: %s',
+                self._label, n, sample_name, self._fail_batches, exc,
+            )
+            return SpanExportResult.FAILURE
+        if result == SpanExportResult.SUCCESS:
+            self._ok_batches += 1
+            self._ok_spans += n
+            logger.info(
+                'APM %s export OK: spans=%d first=%r ok_batches=%d ok_spans=%d',
+                self._label, n, sample_name, self._ok_batches, self._ok_spans,
+            )
+        else:
+            self._fail_batches += 1
+            logger.warning(
+                'APM %s export FAILURE result=%s spans=%d first=%r fail_batches=%d',
+                self._label, result, n, sample_name, self._fail_batches,
+            )
+        return result
+
+    def shutdown(self):
+        return self._inner.shutdown()
+
+    # OTLP exporter 可能还被查 force_flush；直通。
+    def force_flush(self, timeout_millis: int = 30000):
+        fn = getattr(self._inner, 'force_flush', None)
+        if callable(fn):
+            return fn(timeout_millis)
+        return True
+
+
 def _resolve_host_identity() -> tuple[str, str]:
     """解析上报到 APM 的主机/实例标识。
 
@@ -163,20 +217,41 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
             if not eff_endpoint.startswith('https://'):
                 exporter_kwargs['insecure'] = True
         exporter = OTLPSpanExporter(**exporter_kwargs)
-        provider.add_span_processor(BatchSpanProcessor(span_exporter=exporter))
+        logger.info(
+            'APM OTLP exporter built: protocol=%s endpoint=%s insecure=%s headers_keys=%s',
+            eff_proto, eff_endpoint,
+            exporter_kwargs.get('insecure'),
+            [k for k, _ in exporter_kwargs.get('headers', ())],
+        )
+        # 用 wrapper 包一层，每批导出的成功/失败都显式打日志，避免只靠 OTel 内部的 ERROR
+        # 事件做判断（成功时 OTel 完全静默，排障时无法确定 exporter 是否真跑了）
+        wrapped_otlp = _LoggingSpanExporterWrapper(inner=exporter, label='OTLP')
+        provider.add_span_processor(BatchSpanProcessor(span_exporter=wrapped_otlp))
 
-        # 排障开关：设 OTEL_DEBUG_SPAN_CONSOLE=1 时把 span 同步打到 stdout（与 OTLP 并行），
-        # 可直接 `docker logs` 确认实际发送的 attribute（尤其 http.method / http.target 等旧
-        # semconv 有没有生效）。生产关闭。
-        if os.environ.get('OTEL_DEBUG_SPAN_CONSOLE', '').strip() in ('1', 'true', 'yes'):
+        # 排障期默认同时挂 ConsoleSpanExporter，和 OTLP 并行（对齐腾讯官方文档示例
+        # `--traces_exporter=console,otlp_proto_grpc` 的思路），`docker logs` 可直接
+        # 看到 span 的 resource / attributes / status 等实际内容，验证是否包含旧
+        # semconv（http.method / http.target / http.status_code）。需要关掉时设环境
+        # 变量 OTEL_DEBUG_SPAN_CONSOLE=0（或 off/false/no）。
+        console_off_values = {'0', 'false', 'no', 'off'}
+        if os.environ.get('OTEL_DEBUG_SPAN_CONSOLE', '').strip().lower() not in console_off_values:
             try:
                 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
                 provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
-                logger.info('APM debug: ConsoleSpanExporter enabled (OTEL_DEBUG_SPAN_CONSOLE=1)')
+                logger.info('APM ConsoleSpanExporter enabled (set OTEL_DEBUG_SPAN_CONSOLE=0 to disable)')
             except Exception as e:
-                logger.warning('APM debug: ConsoleSpanExporter 挂载失败: %s', e)
+                logger.warning('APM ConsoleSpanExporter 挂载失败: %s', e)
+        else:
+            logger.info('APM ConsoleSpanExporter disabled (OTEL_DEBUG_SPAN_CONSOLE=%s)',
+                        os.environ.get('OTEL_DEBUG_SPAN_CONSOLE', ''))
 
         trace.set_tracer_provider(provider)
+        logger.info(
+            'APM TracerProvider set: service.name=%s service.instance.id=%s host.name=%s '
+            'deployment.environment=%s sampler=TraceIdRatioBased(%.2f)',
+            apm_config.service_name, instance_id, host_name,
+            apm_config.env, apm_config.sampler_ratio,
+        )
     except Exception as e:
         logger.exception('APM TracerProvider 初始化失败: %s', e)
         return False

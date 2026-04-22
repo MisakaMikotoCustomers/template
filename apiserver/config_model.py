@@ -10,6 +10,7 @@
 import os
 from dataclasses import dataclass, field
 from typing import List
+from urllib.parse import quote_plus
 
 try:
     import tomllib  # Python 3.11+
@@ -50,11 +51,18 @@ class DatabaseConfig:
     echo: bool = False
 
     def async_url(self) -> str:
-        """SQLAlchemy 2.0 + aiomysql 的异步连接串。"""
+        """SQLAlchemy 2.0 + aiomysql 的异步连接串。
+
+        username / password 必须 URL 编码：生产里阿里云 RDS 发的随机密码含 `@`
+        / `#` / `/` 等保留字符时，未编码会被 SQLAlchemy 按 userinfo 分界解析错位
+        （例如 password `lLx@iBxIMcs5brbD` → host 被识别成
+        `iBxIMcs5brbD@rm-xxx.mysql.rds.aliyuncs.com`，aiomysql 直接抛
+        `gaierror: Name or service not known`）。
+        """
         if self.type != "mysql":
             raise ValueError(f"暂不支持的数据库类型: {self.type}")
         return (
-            f"mysql+aiomysql://{self.username}:{self.password}"
+            f"mysql+aiomysql://{quote_plus(self.username)}:{quote_plus(self.password)}"
             f"@{self.url}:{self.port}/{self.database}?charset=utf8mb4"
         )
 
@@ -80,11 +88,43 @@ class AuthConfig:
 
 
 @dataclass
+class ClsConfig:
+    """
+    腾讯云 CLS 日志上报配置。
+
+    默认 `enabled=False` —— 保持 stdout-only，本地 dev / 未接 CLS 的环境零依赖。
+    部署到带 CLS 的环境时由 ai-task 在 deploy TOML 里自动注入 `[log]` 段（启动
+    后会映射到这里），运维侧无需手工改模板。
+    """
+    enabled: bool = False
+    region: str = ""
+    secret_id: str = ""
+    secret_key: str = ""
+    topic_id: str = ""                   # apiserver 自身日志 topic（ai-task [log] 段注入）
+    service: str = "apiserver"           # 写入 CLS Contents.service 字段
+    env: str = "default"                 # prod / test / default
+    fallback_path: str = "/tmp/cls_fallback.jsonl"
+    fallback_max_mb: int = 200
+
+
+@dataclass
+class SqlInterceptorConfig:
+    """SQLAlchemy SQL 耗时拦截器配置。默认关闭。"""
+    enabled: bool = False
+    slow_threshold_ms: int = 200
+    max_sql_bytes: int = 2048
+    log_params: bool = True
+    max_params_bytes: int = 1024
+
+
+@dataclass
 class AppConfig:
     """应用总配置"""
     server: ServerConfig = field(default_factory=ServerConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    cls: ClsConfig = field(default_factory=ClsConfig)
+    sql_interceptor: SqlInterceptorConfig = field(default_factory=SqlInterceptorConfig)
 
     @classmethod
     def from_toml(cls, path: str) -> "AppConfig":
@@ -102,10 +142,15 @@ class AppConfig:
             for item in raw_accounts
             if isinstance(item, dict)
         ]
+        # ai-task 注入的官方 log 段是 `[log]`，同时兼容直接写 `[cls]` 的部署。
+        cls_raw = dict(data.get("cls") or data.get("log") or {})
+        sql_raw = dict(data.get("sql_interceptor") or {})
         return cls(
             server=ServerConfig(**data.get("server", {})),
             database=DatabaseConfig(**data.get("database", {})),
             auth=AuthConfig(**auth_raw, special_accounts=accounts),
+            cls=ClsConfig(**cls_raw),
+            sql_interceptor=SqlInterceptorConfig(**sql_raw),
         )
 
     @classmethod

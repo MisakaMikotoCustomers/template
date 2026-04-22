@@ -53,3 +53,38 @@ session_expire_days = 7
 [[auth.special_accounts]]
 name = "admin"
 password = "changeme"
+
+# ============================================================
+# 日志（腾讯云 CLS）
+# ------------------------------------------------------------
+# 本段等同于 `[log]`，ai-task 在部署时会自动注入 `[log]` 段覆盖这些字段
+# （见 ai-task 的 deploy TOML 生成器）。本地 dev / 未接 CLS 的部署保持
+# `enabled = false` 即可，日志只会输出到 stdout（已经是 JSON 结构化）。
+# ============================================================
+[cls]
+enabled = false
+region = ""
+secret_id = ""
+secret_key = ""
+# apiserver 自身日志的 CLS topic。由 ai-task 为每个 (deploy, env) 分配。
+topic_id = ""
+# 写入 CLS 每条日志的 service / env 字段，便于在 CLS 里按来源过滤
+service = "apiserver"
+env = "default"
+# 远程上报失败时的本地降级文件（按大小轮转）
+fallback_path = "/tmp/cls_fallback.jsonl"
+fallback_max_mb = 200
+
+# ============================================================
+# SQL 耗时拦截器（SQLAlchemy event 钩子）
+# ------------------------------------------------------------
+# 启用后每条 SQL 都会以 INFO 级别打印（含耗时、行数、参数预览）；
+# 超过 slow_threshold_ms 的单独标记 event=mysql.slow 便于聚合告警。
+# 默认关闭，真正需要排查性能时再打开。
+# ============================================================
+[sql_interceptor]
+enabled = false
+slow_threshold_ms = 200
+max_sql_bytes = 2048
+log_params = true
+max_params_bytes = 1024

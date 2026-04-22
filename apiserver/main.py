@@ -20,7 +20,9 @@ import asyncio
 import logging
 import os
 import sys
+import time
 import traceback
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -39,6 +41,8 @@ except ImportError:
 
 from config_model import AppConfig
 from dao import dispose_engine, init_database
+from dao.connection import get_engine
+from dao.sql_interceptor import install_sql_interceptor
 from routes.admin.admin import router as admin_router
 from routes.app.feedback import router as app_feedback_router
 from routes.app.secret import router as app_secret_router
@@ -46,12 +50,11 @@ from routes.app.user import router as app_user_router
 from routes.auth_plugin import register_auth, skip_auth
 from routes.open.ping import router as open_ping_router
 from service.user_service import sync_special_accounts
+from utils.log_utils import bind_context, init_logging, reset_context
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-)
+# 注：init_logging 会重置 root handlers，下面的 basicConfig 仅在未启用
+# 结构化日志时起作用（例如本地 dev 时 cls.enabled=False 也一样走 stdout JSON）。
+# 真正的 logger 初始化放在 _load_config 之后，见模块末尾的 `init_logging(...)` 调用。
 logger = logging.getLogger('apiserver')
 
 
@@ -74,6 +77,15 @@ def create_app(config: AppConfig) -> FastAPI:
             'Database initialized: %s:%s/%s',
             config.database.url, config.database.port, config.database.database,
         )
+        # SQL 拦截器（可选）：必须在 init_database 之后、业务流量到达之前安装。
+        if config.sql_interceptor.enabled:
+            install_sql_interceptor(
+                engine=get_engine(),
+                slow_threshold_ms=config.sql_interceptor.slow_threshold_ms,
+                max_sql_bytes=config.sql_interceptor.max_sql_bytes,
+                log_params=config.sql_interceptor.log_params,
+                max_params_bytes=config.sql_interceptor.max_params_bytes,
+            )
         # 特殊账号 upsert：依赖 user 表已建好，必须在 init_database 之后
         await sync_special_accounts(config.auth.special_accounts)
         yield
@@ -99,6 +111,46 @@ def create_app(config: AppConfig) -> FastAPI:
         allow_headers=['*'],
         expose_headers=['traceId'],
     )
+
+    # 访问日志中间件：
+    # - 入口绑定 trace_id / path / method 到 ContextVar，使整个请求内的所有
+    #   `logger.info(...)` 自动带上这些字段；
+    # - 出口读取 response.status / 已鉴权的 request.state.user，打一条
+    #   `event=http.request` 汇总日志，并 reset ContextVar。
+    # 注意 FastAPI 的 `app.middleware('http')` 是按注册反向入栈，auth 插件
+    # 在后面 `register_auth(...)` 再注册，所以本中间件实际在最外层、
+    # 会覆盖整个请求生命周期（含鉴权前的 401/403）。
+    _http_logger = logging.getLogger('apiserver.http')
+
+    @app.middleware('http')
+    async def _access_log_middleware(request: Request, call_next):
+        started = time.perf_counter()
+        trace_id = request.headers.get('traceId') or f'auto-{uuid.uuid4()}'
+        # 同步给 auth 插件，避免双生 trace_id（auth_plugin._ensure_trace_id
+        # 读到 request.state.trace_id 就直接复用）。
+        request.state.trace_id = trace_id
+        token = bind_context(trace_id=trace_id, path=request.url.path, method=request.method)
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = getattr(response, 'status_code', 500)
+            return response
+        finally:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            user = getattr(request.state, 'user', None)
+            user_id = getattr(user, 'user_id', None) if user else None
+            if user_id is not None:
+                bind_context(user_id=user_id)
+            _http_logger.info(
+                'http.request %s %s status=%s duration_ms=%d',
+                request.method, request.url.path, status_code, duration_ms,
+                extra={
+                    'event': 'http.request',
+                    'status': status_code,
+                    'latency_ms': duration_ms,
+                },
+            )
+            reset_context(token)
 
     # 路由：/api/app/*
     app.include_router(app_user_router, prefix=f'{api_prefix}/app/user', tags=['app-user'])
@@ -184,6 +236,15 @@ def create_app(config: AppConfig) -> FastAPI:
 
 # ASGI 入口：`gunicorn main:app` / `uvicorn main:app`
 _config = _load_config()
+# 先初始化日志：`init_logging` 会清空 root handlers 并挂 stdout JSON，
+# 若 cls.enabled=True 则额外挂 AsyncCLSHandler。必须在 create_app 之前，
+# 否则 FastAPI/uvicorn 注册的默认 handler 会与之冲突。
+init_logging(
+    cls_config=_config.cls,
+    service=_config.cls.service or 'apiserver',
+    env=_config.cls.env or 'default',
+    topic_id=_config.cls.topic_id,
+)
 app = create_app(_config)
 
 

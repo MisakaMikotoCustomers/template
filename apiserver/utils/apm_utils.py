@@ -34,6 +34,15 @@ from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
+# 全局 TracerProvider 只建一次。init_apm 可能被调用两次：
+#   Phase 1（create_app 内）：app 已就绪，engine 还没；安装 TracerProvider + FastAPI/httpx 埋点。
+#   Phase 2（lifespan 内，init_database 之后）：engine 就绪；只挂 SQLAlchemyInstrumentor。
+# 分两次的原因：FastAPI/Starlette 的 middleware_stack 在 ASGI server 第一次
+# 调用 app（含 lifespan）时 lazily 构建，之后再 app.add_middleware(...) 不会
+# 进入已构建的栈——FastAPIInstrumentor 必须在 lifespan 之前挂上，否则 HTTP 请求
+# 不会生成 span，控制台「应用/接口分析」看不到数据。
+_tracer_provider_ready = False
+
 
 class _LoggingSpanExporterWrapper:
     """把 OTLP exporter 的每次导出结果显式打日志，便于排障。
@@ -158,29 +167,13 @@ def _coerce_otlp_endpoint_protocol(endpoint: str, protocol: str) -> tuple[str, s
     return proto, ep
 
 
-def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
-    """根据 ApmConfig 初始化 OpenTelemetry 并接入腾讯云 APM。
+def _setup_tracer_provider(apm_config) -> bool:
+    """构建并注册全局 TracerProvider（只应被 init_apm 调用一次）。
 
-    Args:
-        apm_config: ApmConfig 实例
-        app: FastAPI app；启用 instrument_fastapi 时需要
-        engine: SQLAlchemy AsyncEngine；启用 instrument_sqlalchemy 时需要
-                内部会取 engine.sync_engine 传给 SQLAlchemyInstrumentor
-
-    Returns:
-        True: 初始化成功并已挂载 exporter
-        False: 跳过（未启用 / 配置缺失 / SDK 不可用 / 出错）
+    拆出这一步是为了让 init_apm 能在"两阶段"调用下保持幂等：Phase 1 建 provider 并
+    挂 FastAPI；Phase 2 只挂 SQLAlchemy。Provider 生命周期、exporter、Console 调试
+    输出等细节都封装在这里。
     """
-    if apm_config is None or not getattr(apm_config, 'enabled', False):
-        return False
-
-    if not apm_config.token:
-        logger.warning('APM token 未配置，跳过 APM 初始化')
-        return False
-    if not apm_config.endpoint:
-        logger.warning('APM endpoint 未配置，跳过 APM 初始化')
-        return False
-
     try:
         from opentelemetry import trace
         from opentelemetry.sdk.resources import Resource
@@ -264,15 +257,60 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         trace.set_tracer_provider(provider)
         logger.info(
             'APM TracerProvider set: service.name=%s service.instance.id=%s host.name=%s '
-            'deployment.environment=%s sampler=TraceIdRatioBased(%.2f)',
+            'deployment.environment=%s endpoint=%s protocol=%s sampler=TraceIdRatioBased(%.2f)',
             apm_config.service_name, instance_id, host_name,
-            apm_config.env, apm_config.sampler_ratio,
+            apm_config.env, eff_endpoint, eff_proto, apm_config.sampler_ratio,
         )
+        return True
     except Exception as e:
         logger.exception('APM TracerProvider 初始化失败: %s', e)
         return False
 
-    # FastAPI 自动埋点
+
+def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
+    """根据 ApmConfig 初始化 OpenTelemetry 并接入腾讯云 APM。
+
+    支持分阶段调用（幂等）：
+
+    - Phase 1（create_app 内，ASGI server 拿到 app 之前）：传 ``app``、不传 ``engine``。
+      安装 TracerProvider + FastAPIInstrumentor + HTTPXClientInstrumentor。
+      必须在此时挂 FastAPI 埋点，否则 Starlette 的 middleware_stack 在 ASGI server
+      首次调用 app（含 lifespan）时已经构建完，之后 add_middleware 不会进入已构建
+      的栈——FastAPIInstrumentor 的 OpenTelemetryMiddleware 永远不会运行。
+    - Phase 2（lifespan 内、init_database 之后）：传 ``engine``、不传 ``app``。
+      挂 SQLAlchemyInstrumentor；engine 在 startup 阶段才创建。
+
+    TracerProvider 只在首次成功初始化时建立；重复调用仅追加缺失的埋点，互不影响。
+
+    Args:
+        apm_config: ApmConfig 实例
+        app: FastAPI app；启用 instrument_fastapi 时需要
+        engine: SQLAlchemy AsyncEngine；启用 instrument_sqlalchemy 时需要
+                内部会取 engine.sync_engine 传给 SQLAlchemyInstrumentor
+
+    Returns:
+        True: 当次调用至少成功完成一件有用的事（建 provider 或挂任一埋点）
+        False: 跳过（未启用 / 配置缺失 / SDK 不可用 / provider 初始化失败）
+    """
+    global _tracer_provider_ready
+
+    if apm_config is None or not getattr(apm_config, 'enabled', False):
+        return False
+
+    if not apm_config.token:
+        logger.warning('APM token 未配置，跳过 APM 初始化')
+        return False
+    if not apm_config.endpoint:
+        logger.warning('APM endpoint 未配置，跳过 APM 初始化')
+        return False
+
+    # TracerProvider 初始化（仅首次）
+    if not _tracer_provider_ready:
+        if not _setup_tracer_provider(apm_config=apm_config):
+            return False
+        _tracer_provider_ready = True
+
+    # FastAPI 自动埋点：仅当传入 app 时
     if apm_config.instrument_fastapi and app is not None:
         # 腾讯云 APM 的「应用 / 接口分析」聚合仍然按旧 HTTP semconv（http.method / http.target /
         # http.status_code）抽字段。opentelemetry-instrumentation-fastapi >= 0.46b0 默认只发新
@@ -283,13 +321,16 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         os.environ.setdefault('OTEL_SEMCONV_STABILITY_OPT_IN', 'http/dup')
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-            FastAPIInstrumentor.instrument_app(app)
-            logger.info('APM FastAPIInstrumentor attached (semconv_opt_in=%s)',
-                        os.environ.get('OTEL_SEMCONV_STABILITY_OPT_IN', ''))
+            if getattr(app, '_is_instrumented_by_opentelemetry', False):
+                logger.info('APM FastAPIInstrumentor 已挂载，跳过重复')
+            else:
+                FastAPIInstrumentor.instrument_app(app)
+                logger.info('APM FastAPIInstrumentor attached (semconv_opt_in=%s)',
+                            os.environ.get('OTEL_SEMCONV_STABILITY_OPT_IN', ''))
         except Exception as e:
             logger.warning('FastAPIInstrumentor 挂载失败，跳过: %s', e)
 
-    # SQLAlchemy 自动埋点：AsyncEngine 需取 sync_engine 传入
+    # SQLAlchemy 自动埋点：AsyncEngine 需取 sync_engine 传入。仅当传入 engine 时。
     if apm_config.instrument_sqlalchemy and engine is not None:
         try:
             from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
@@ -299,8 +340,9 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         except Exception as e:
             logger.warning('SQLAlchemyInstrumentor 挂载失败，跳过: %s', e)
 
-    # httpx 自动埋点（用于外部 HTTP 调用）
-    if apm_config.instrument_httpx:
+    # httpx 自动埋点（全局；仅在 Phase 1 / 传入 app 时触发，避免 Phase 2 重复 instrument
+    # 触发 BaseInstrumentor 的 "Attempting to instrument while already instrumented" warning）。
+    if apm_config.instrument_httpx and app is not None:
         try:
             from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
             HTTPXClientInstrumentor().instrument()
@@ -308,9 +350,4 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         except Exception as e:
             logger.warning('HTTPXClientInstrumentor 挂载失败，跳过: %s', e)
 
-    logger.info(
-        'APM initialized: service=%s instance=%s host=%s env=%s endpoint=%s protocol=%s sampler_ratio=%.2f',
-        apm_config.service_name, instance_id, host_name, apm_config.env,
-        eff_endpoint, eff_proto, apm_config.sampler_ratio,
-    )
     return True

@@ -6,7 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_DEFAULT_TIMEOUT=120 \
-    APP_CONFIG_PATH=/config/config.toml
+    APP_CONFIG_PATH=/config/config.toml \
+    OTEL_SEMCONV_STABILITY_OPT_IN=http/dup
 
 # 使用阿里云 PyPI 镜像，加速国内构建
 RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
@@ -35,6 +36,14 @@ RUN pip install --retries 10 "tomli>=2.0; python_version < '3.11'"
 # --no-deps 不会装 SDK 自带的 requests，logclient 导入会失败（ModuleNotFoundError: requests）。
 RUN pip install --retries 10 "six" "protobuf>=3.20,<4" "python-dateutil" "lz4" "requests"
 RUN pip install --retries 10 --no-deps "tencentcloud-cls-sdk-python"
+
+# OpenTelemetry for Tencent Cloud APM integration
+# 仅在 [apm].enabled=true 时触发；否则 import 走延迟路径，不影响启动
+RUN pip install --retries 10 "opentelemetry-api>=1.25.0" "opentelemetry-sdk>=1.25.0"
+RUN pip install --retries 10 "opentelemetry-exporter-otlp>=1.25.0"
+RUN pip install --retries 10 "opentelemetry-instrumentation-fastapi>=0.46b0"
+RUN pip install --retries 10 "opentelemetry-instrumentation-sqlalchemy>=0.46b0"
+RUN pip install --retries 10 "opentelemetry-instrumentation-httpx>=0.46b0"
 
 COPY . /app
 

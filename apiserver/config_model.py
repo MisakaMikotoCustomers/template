@@ -80,11 +80,36 @@ class AuthConfig:
 
 
 @dataclass
+class ApmConfig:
+    """腾讯云 APM（应用性能监控）配置
+
+    基于 OpenTelemetry + OTLP 协议接入腾讯云 APM。
+    - enabled=False 时完全跳过 APM 初始化，零开销零行为影响
+    - endpoint 为腾讯云 APM 接入点，形如 "ap-guangzhou.apm.tencentcs.com:4317"（gRPC）
+    - token 为 APM 实例的 Token（由 ai_task 平台 generate_official_toml 自动下发）
+    - service_name 用于在 APM 控制台区分不同服务
+    - sampler_ratio 控制采样率（0~1），高 QPS 服务可降至 0.1~0.3
+    - template 使用 FastAPI + httpx，埋点开关对应 fastapi / httpx
+    """
+    enabled: bool = False
+    endpoint: str = "ap-guangzhou.apm.tencentcs.com:4317"
+    token: str = ""
+    service_name: str = "template-apiserver"
+    env: str = "prod"
+    sampler_ratio: float = 1.0
+    protocol: str = "grpc"              # grpc / http
+    instrument_fastapi: bool = True
+    instrument_sqlalchemy: bool = True
+    instrument_httpx: bool = True
+
+
+@dataclass
 class AppConfig:
     """应用总配置"""
     server: ServerConfig = field(default_factory=ServerConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    apm: ApmConfig = field(default_factory=ApmConfig)
 
     @classmethod
     def from_toml(cls, path: str) -> "AppConfig":
@@ -106,6 +131,7 @@ class AppConfig:
             server=ServerConfig(**data.get("server", {})),
             database=DatabaseConfig(**data.get("database", {})),
             auth=AuthConfig(**auth_raw, special_accounts=accounts),
+            apm=ApmConfig(**data.get("apm", {})),
         )
 
     @classmethod

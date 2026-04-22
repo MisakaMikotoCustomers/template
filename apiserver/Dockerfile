@@ -24,6 +24,13 @@ RUN pip install --retries 10 "aiomysql>=0.2.0"
 RUN pip install --retries 10 "httpx>=0.27"
 RUN pip install --retries 10 "pydantic>=2.5"
 RUN pip install --retries 10 "tomli>=2.0; python_version < '3.11'"
+# OpenTelemetry for Tencent Cloud APM integration
+# 仅在 [apm].enabled=true 时触发；否则 import 走延迟路径，不影响启动
+RUN pip install --retries 10 "opentelemetry-api>=1.25.0" "opentelemetry-sdk>=1.25.0"
+RUN pip install --retries 10 "opentelemetry-exporter-otlp>=1.25.0"
+RUN pip install --retries 10 "opentelemetry-instrumentation-fastapi>=0.46b0"
+RUN pip install --retries 10 "opentelemetry-instrumentation-sqlalchemy>=0.46b0"
+RUN pip install --retries 10 "opentelemetry-instrumentation-httpx>=0.46b0"
 
 COPY . /app
 

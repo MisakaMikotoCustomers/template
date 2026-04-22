@@ -112,12 +112,13 @@ def init_apm(apm_config, app: Any = None, engine: Any = None) -> bool:
         sampler = TraceIdRatioBased(rate=apm_config.sampler_ratio)
         provider = TracerProvider(resource=resource, sampler=sampler)
 
-        # 腾讯云 APM OTLP 鉴权 header：按官方 Python 示例 key 为 "Authentication"
-        # （大写 A）。虽然 gRPC metadata 语义上不区分大小写，部分老版本腾讯侧网关
-        # 会严格 case-match，改为大写 A 更稳妥。
+        # OTLP 鉴权 header key 必须**全小写**。gRPC/HTTP2 metadata key 语法只允许
+        # [-_.0-9a-z]+，Python grpc 客户端在发送前会强校验，含任何大写字母直接抛
+        # "metadata was invalid: ('Authentication', ...)" —— span 根本出不了本机。
+        # 腾讯云 APM 端对 key 大小写不敏感，小写就行。
         exporter_kwargs = {
             'endpoint': apm_config.endpoint,
-            'headers': (('Authentication', apm_config.token),),
+            'headers': (('authentication', apm_config.token),),
         }
         if apm_config.protocol == 'grpc':
             # 腾讯云 APM gRPC 接入点不需要 TLS（明文 token 鉴权）

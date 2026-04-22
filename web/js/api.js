@@ -4,6 +4,7 @@
  * - 从 /config.json（由容器启动时根据 config.toml 生成）读取后端地址、展示名
  * - 所有请求自动带 Authorization / traceId / Content-Type
  * - 401 自动清空本地登录态并跳回登录页
+ * - 同时把 config.rum 暴露到 window.__RUM_CONFIG__，供 rum.js 按需启用
  */
 
 let API_BASE = '/api';
@@ -27,6 +28,8 @@ async function initAPIConfig() {
                         // host 留空 -> 同域，直接用 prefix
                         API_BASE = (host || '') + prefix;
                     }
+                    // 暴露 RUM 配置给 rum.js；未配置时为 null。
+                    window.__RUM_CONFIG__ = config.rum || null;
                 }
             }
         } catch (e) {

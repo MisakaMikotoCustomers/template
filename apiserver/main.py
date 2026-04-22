@@ -88,11 +88,11 @@ def create_app(config: AppConfig) -> FastAPI:
             )
         # 特殊账号 upsert：依赖 user 表已建好，必须在 init_database 之后
         await sync_special_accounts(config.auth.special_accounts)
-        # 腾讯云 APM 接入（OpenTelemetry + OTLP）
-        # enabled=false 时 init_apm 立即返回，零开销；内部已做 import/异常降级
+        # APM Phase 2：SQLAlchemy 埋点需要真正的 engine，engine 在 init_database 里才建
+        # 起来；FastAPI / httpx 不能放这里，详见 create_app 中的 Phase 1 注释。
         if getattr(config, 'apm', None) and config.apm.enabled:
             from utils.apm_utils import init_apm
-            init_apm(apm_config=config.apm, app=app, engine=get_engine())
+            init_apm(apm_config=config.apm, engine=get_engine())
         yield
         await dispose_engine()
         logger.info('Database engine disposed')
@@ -106,6 +106,16 @@ def create_app(config: AppConfig) -> FastAPI:
         redoc_url=None,
     )
     app.state.app_config = config
+
+    # APM Phase 1：在 app 交给 uvicorn 之前挂 TracerProvider + FastAPIInstrumentor + HTTPX。
+    # FastAPI/Starlette 的 middleware_stack 在 ASGI server 首次调用 app（含 lifespan
+    # 协议）时 lazily 构建完成，之后 app.add_middleware(...) 无法进入已构建的栈——
+    # 如果把 FastAPIInstrumentor 放到 lifespan 里挂，OpenTelemetryMiddleware 永远
+    # 不会被调用，HTTP 请求不会生成 span，腾讯云 APM 控制台「接口分析」看不到数据。
+    # 这里是 create_app 返回前的最后机会。enabled=false 时 init_apm 立即返回，零开销。
+    if getattr(config, 'apm', None) and config.apm.enabled:
+        from utils.apm_utils import init_apm
+        init_apm(apm_config=config.apm, app=app)
 
     # CORS（开发期宽松，生产按需收紧）
     app.add_middleware(

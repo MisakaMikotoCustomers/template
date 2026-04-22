@@ -123,19 +123,25 @@ class ApmConfig:
 
     基于 OpenTelemetry + OTLP 协议接入腾讯云 APM。
     - enabled=False 时完全跳过 APM 初始化，零开销零行为影响
-    - endpoint 为腾讯云 APM 接入点，形如 "https://ap-shanghai.apm.tencentcs.com:4320"
+    - endpoint 为腾讯云 APM 接入点：
+        * OTLP/HTTP: "https://<region>.apm.tencentcs.com/adapt/trace/v1/traces"
+        * OTLP/gRPC: "<region>.apm.tencentcs.com:4317"（无 scheme，SDK 自行处理 TLS）
+      历史上使用过的 "https://<region>.apm.tencentcs.com:4320" 经 exporter 补全后会命中
+      :4320/v1/traces，不是腾讯云 APM 发布的入口，服务端直接 RemoteDisconnected；请使用
+      上述官方路径（老配置由 _coerce_otlp_endpoint_protocol 自动补成 /adapt/trace/v1/traces）。
     - token 为 APM 实例的 Token（由 ai_task 平台 generate_official_toml 自动下发）
     - service_name 用于在 APM 控制台区分不同服务
     - sampler_ratio 控制采样率（0~1），高 QPS 服务可降至 0.1~0.3
     - template 使用 FastAPI + httpx，埋点开关对应 fastapi / httpx
     """
     enabled: bool = False
-    endpoint: str = "https://ap-shanghai.apm.tencentcs.com:4320"
+    endpoint: str = "https://ap-shanghai.apm.tencentcs.com/adapt/trace/v1/traces"
     token: str = ""
     service_name: str = "template-apiserver"
     env: str = "prod"
     sampler_ratio: float = 1.0
-    protocol: str = "http"              # grpc：裸 host:4317；http：https://…:4320 等 OTLP/HTTP
+    # grpc：裸 <region>.apm.tencentcs.com:4317；http：https://<region>.apm.tencentcs.com/adapt/trace/v1/traces
+    protocol: str = "http"
     instrument_fastapi: bool = True
     instrument_sqlalchemy: bool = True
     instrument_httpx: bool = True

@@ -1,0 +1,51 @@
+name: deploy
+
+# 极简触发 workflow：只做参数转发到中心 ci-templates 的 reusable workflow。
+# 由 ai-task apiserver 通过 workflow_dispatch 调用。
+#
+# CI_TEMPLATES_REF 决定使用哪个中心 tag，默认 v1；升级中心模板时改版本即可平滑切换。
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_repo:
+        description: 完整镜像仓库名（不含 tag）
+        required: true
+        type: string
+      image_tag:
+        description: 镜像 tag（一般为 commit 短 SHA）
+        required: true
+        type: string
+      dockerfile_path:
+        description: Dockerfile 相对路径
+        required: false
+        type: string
+        default: Dockerfile
+      build_context:
+        description: 构建上下文目录
+        required: false
+        type: string
+        default: .
+      trace_id:
+        description: ai-task 链路追踪 ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  call-build:
+    # 组织名在 ai-task 下发 workflow 时占位替换为真实组织
+    uses: ORG_PLACEHOLDER/ci-templates/.github/workflows/build-and-push.yml@v1
+    with:
+      image_repo: ${{ inputs.image_repo }}
+      image_tag: ${{ inputs.image_tag }}
+      dockerfile_path: ${{ inputs.dockerfile_path }}
+      build_context: ${{ inputs.build_context }}
+      trace_id: ${{ inputs.trace_id }}
+    secrets:
+      TCR_REGISTRY: ${{ secrets.TCR_REGISTRY }}
+      TCR_ROLE_ARN: ${{ secrets.TCR_ROLE_ARN }}
+      TCR_OIDC_PROVIDER: ${{ secrets.TCR_OIDC_PROVIDER }}

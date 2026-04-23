@@ -118,6 +118,35 @@ class SqlInterceptorConfig:
 
 
 @dataclass
+class ApmConfig:
+    """腾讯云 APM（应用性能监控）配置
+
+    基于 OpenTelemetry + OTLP 协议接入腾讯云 APM。
+    - enabled=False 时完全跳过 APM 初始化，零开销零行为影响
+    - endpoint 为腾讯云 APM 外网接入点（控制台「接入应用」→「外网上报」）：
+        * HTTPS 接入点 "https://<region>.apm.tencentcs.com:4320" —— TLS 上的 OTLP/gRPC，配 protocol="grpc"
+        * HTTP  接入点 "http://<region>.apm.tencentcs.com:4319"  —— 明文 OTLP/gRPC，配 protocol="grpc"
+      两者都是 gRPC（scheme 只决定是否 TLS）。配成 protocol="http" 会被 OTLPSpanExporter(proto/http)
+      发成普通 POST，服务端 RemoteDisconnected 断连，span 永远上报不出去。
+    - token 为 APM 实例的 Token（由 ai_task 平台 generate_official_toml 自动下发）
+    - service_name 用于在 APM 控制台区分不同服务
+    - sampler_ratio 控制采样率（0~1），高 QPS 服务可降至 0.1~0.3
+    - template 使用 FastAPI + httpx，埋点开关对应 fastapi / httpx
+    """
+    enabled: bool = False
+    endpoint: str = "https://ap-shanghai.apm.tencentcs.com:4320"
+    token: str = ""
+    service_name: str = "template-apiserver"
+    env: str = "prod"
+    sampler_ratio: float = 1.0
+    # 腾讯云 APM 外网接入点（:4319 明文 / :4320 TLS）都是 gRPC，固定 "grpc"
+    protocol: str = "grpc"
+    instrument_fastapi: bool = True
+    instrument_sqlalchemy: bool = True
+    instrument_httpx: bool = True
+
+
+@dataclass
 class AppConfig:
     """应用总配置"""
     server: ServerConfig = field(default_factory=ServerConfig)
@@ -125,6 +154,7 @@ class AppConfig:
     auth: AuthConfig = field(default_factory=AuthConfig)
     cls: ClsConfig = field(default_factory=ClsConfig)
     sql_interceptor: SqlInterceptorConfig = field(default_factory=SqlInterceptorConfig)
+    apm: ApmConfig = field(default_factory=ApmConfig)
 
     @classmethod
     def from_toml(cls, path: str) -> "AppConfig":
@@ -151,6 +181,7 @@ class AppConfig:
             auth=AuthConfig(**auth_raw, special_accounts=accounts),
             cls=ClsConfig(**cls_raw),
             sql_interceptor=SqlInterceptorConfig(**sql_raw),
+            apm=ApmConfig(**data.get("apm", {})),
         )
 
     @classmethod

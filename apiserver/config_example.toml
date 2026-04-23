@@ -88,3 +88,27 @@ slow_threshold_ms = 200
 max_sql_bytes = 2048
 log_params = true
 max_params_bytes = 1024
+
+[apm]
+# 腾讯云 APM（应用性能监控）。通常由 ai_task 平台在部署时通过官方配置下发，
+# 无需手动填写；本段提供字段文档供参考。enabled=false 时完全零开销。
+enabled = false
+# 腾讯云 APM 外网接入点（控制台「接入应用」→ Python SDK）：
+#   HTTPS 接入点: "https://<region>.apm.tencentcs.com:4320" —— TLS 上的 OTLP/gRPC（推荐）
+#   HTTP  接入点: "http://<region>.apm.tencentcs.com:4319"  —— 明文 OTLP/gRPC
+# 两者都走 gRPC，protocol 必须配 "grpc"（见下）。
+endpoint = "https://ap-shanghai.apm.tencentcs.com:4320"
+# APM 实例 Token（控制台 -> 应用列表 -> 接入应用 获取）
+token = ""
+# 服务名：展示在腾讯云 APM "应用列表"
+service_name = "template-apiserver"
+# 环境标识（test/prod），写入 deployment.environment 属性
+env = "prod"
+# 采样率 0~1，高 QPS 服务可降至 0.1~0.3
+sampler_ratio = 1.0
+# 上报协议：grpc / http —— 腾讯云 APM 外网 :4319/:4320 都是 gRPC，固定 "grpc"
+protocol = "grpc"
+# 自动埋点开关（FastAPI + SQLAlchemy + httpx）
+instrument_fastapi = true
+instrument_sqlalchemy = true
+instrument_httpx = true

@@ -39,13 +39,129 @@ function generateUUID() {
     });
 }
 
-/** 浏览器端做一次 SHA-256，避免明文密码跨网络传输 */
+/**
+ * 浏览器端做一次 SHA-256，避免明文密码跨网络传输
+ *
+ * 兼容说明：WebCrypto 的 `crypto.subtle` 仅在 Secure Context 下暴露
+ * （HTTPS 或 http://localhost）。ai-task 测试环境下发的 HTTP 域名不是
+ * Secure Context，`crypto.subtle` 为 undefined，直接调用会抛
+ * "Cannot read properties of undefined (reading 'digest')"。此处加纯 JS
+ * 兜底实现，输出与原生 WebCrypto 完全一致的 64 位小写 hex，保证后端
+ * 无论用户从 HTTP 还是 HTTPS 注册，hash 都能对上。
+ */
 async function hashPassword(plain) {
-    const enc = new TextEncoder().encode(plain);
-    const buf = await crypto.subtle.digest('SHA-256', enc);
-    return Array.from(new Uint8Array(buf))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+    const text = plain || '';
+    if (typeof window !== 'undefined'
+        && window.isSecureContext
+        && window.crypto && window.crypto.subtle) {
+        const enc = new TextEncoder().encode(text);
+        const buf = await window.crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+    }
+    return _sha256HexFallback(text);
+}
+
+/** 纯 JS SHA-256（UTF-8 字节 -> 64 位小写 hex）。仅在 WebCrypto 不可用时走。 */
+function _sha256HexFallback(str) {
+    const bytes = _utf8Encode(str);
+    const bitLen = bytes.length * 8;
+    const rem = bytes.length % 64;
+    const padLen = rem < 56 ? 56 - rem : 120 - rem;
+    const total = bytes.length + padLen + 8;
+    const buf = new Uint8Array(total);
+    buf.set(bytes);
+    buf[bytes.length] = 0x80;
+    const dv = new DataView(buf.buffer);
+    dv.setUint32(total - 8, Math.floor(bitLen / 0x100000000), false);
+    dv.setUint32(total - 4, bitLen >>> 0, false);
+
+    const K = [
+        0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+        0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+        0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+        0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+        0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+        0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+        0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+        0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
+    ];
+    const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    const W = new Uint32Array(64);
+    const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+
+    for (let chunk = 0; chunk < total; chunk += 64) {
+        for (let i = 0; i < 16; i++) W[i] = dv.getUint32(chunk + i * 4, false);
+        for (let i = 16; i < 64; i++) {
+            const w15 = W[i - 15], w2 = W[i - 2];
+            const s0 = rotr(w15, 7) ^ rotr(w15, 18) ^ (w15 >>> 3);
+            const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >>> 10);
+            W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
+        }
+        let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+        for (let i = 0; i < 64; i++) {
+            const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+            const ch = (e & f) ^ (~e & g);
+            const t1 = (h + S1 + ch + K[i] + W[i]) >>> 0;
+            const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+            const mj = (a & b) ^ (a & c) ^ (b & c);
+            const t2 = (S0 + mj) >>> 0;
+            h = g; g = f; f = e; e = (d + t1) >>> 0;
+            d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+        }
+        H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0;
+        H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+        H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0;
+        H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+    }
+    let hex = '';
+    for (let i = 0; i < 8; i++) hex += H[i].toString(16).padStart(8, '0');
+    return hex;
+}
+
+function _utf8Encode(str) {
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str);
+    const bytes = [];
+    for (let i = 0; i < str.length; i++) {
+        let c = str.charCodeAt(i);
+        if (c < 0x80) {
+            bytes.push(c);
+        } else if (c < 0x800) {
+            bytes.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+        } else if (c >= 0xd800 && c <= 0xdbff) {
+            const c2 = str.charCodeAt(++i);
+            const cp = 0x10000 + (((c - 0xd800) << 10) | (c2 - 0xdc00));
+            bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f),
+                       0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+        } else {
+            bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+        }
+    }
+    return new Uint8Array(bytes);
+}
+
+/**
+ * 复制文本到剪贴板：优先使用 Clipboard API（仅 Secure Context 可用），
+ * 非 Secure Context 退化到 document.execCommand('copy')。
+ */
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(text); return true; } catch (_) { /* 走兜底 */ }
+    }
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand && document.execCommand('copy');
+        ta.remove();
+        return !!ok;
+    } catch (_) {
+        return false;
+    }
 }
 
 function escapeHTML(str) {
@@ -153,8 +269,8 @@ function showDebugPanel({ title, message, debug, traceId }) {
             debug && debug.cause ? `cause: ${debug.cause}` : '',
             debug && debug.traceback ? `\n${debug.traceback}` : '',
         ].filter(Boolean).join('\n');
-        try { await navigator.clipboard.writeText(text); copyBtn.textContent = '已复制'; }
-        catch (_) { copyBtn.textContent = '复制失败'; }
+        const ok = await copyTextToClipboard(text);
+        copyBtn.textContent = ok ? '已复制' : '复制失败';
         setTimeout(() => { copyBtn.textContent = '复制'; }, 1500);
     });
     const closeBtn = mkBtn('×', () => card.remove());
